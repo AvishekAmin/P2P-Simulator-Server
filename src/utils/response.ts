@@ -5,7 +5,6 @@ interface SuccessBody<T> {
   success: true;
   data: T;
   error: null;
-  requestId: string;
 }
 
 interface ErrorBody {
@@ -16,7 +15,6 @@ interface ErrorBody {
     message: string;
     details?: unknown;
   };
-  requestId: string;
 }
 
 export function sendSuccess<T>(res: Response, data: T, status = 200): Response<SuccessBody<T>> {
@@ -24,7 +22,6 @@ export function sendSuccess<T>(res: Response, data: T, status = 200): Response<S
     success: true,
     data,
     error: null,
-    requestId: res.req.requestId,
   };
   return res.status(status).json(body);
 }
@@ -40,7 +37,6 @@ export function sendError(
     success: false,
     data: null,
     error: { code, message, ...(details !== undefined ? { details } : {}) },
-    requestId: res.req.requestId,
   };
   return res.status(status).json(body);
 }

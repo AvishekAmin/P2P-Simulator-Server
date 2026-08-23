@@ -6,7 +6,6 @@ import { AppError } from "../src/utils/AppError.js";
 
 function mockResponse() {
   const res: Partial<Response> = {
-    req: { requestId: "req_test" } as unknown as Request,
     status: vi.fn().mockReturnThis(),
     json: vi.fn().mockReturnThis(),
   };
@@ -25,7 +24,6 @@ describe("errorHandler", () => {
       expect.objectContaining({
         success: false,
         error: expect.objectContaining({ code: "NOT_FOUND", message: "Invoice not found" }),
-        requestId: "req_test",
       }),
     );
   });

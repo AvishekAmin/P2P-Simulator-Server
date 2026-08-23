@@ -152,7 +152,7 @@ Core principle:
 Every API request should follow:
 
 ```text
-Request → Authentication → Authorization → Request ID → Validation → Controller → Service → Database / Queue → Response
+Request → Authentication → Authorization → Validation → Controller → Service → Database / Queue → Response
 ```
 
 API should generally:
@@ -183,8 +183,7 @@ Success:
 {
   "success": true,
   "data": {},
-  "error": null,
-  "requestId": "req_123"
+  "error": null
 }
 ```
 
@@ -198,8 +197,7 @@ Failure:
     "code": "VALIDATION_ERROR",
     "message": "Invalid request",
     "details": {}
-  },
-  "requestId": "req_123"
+  }
 }
 ```
 

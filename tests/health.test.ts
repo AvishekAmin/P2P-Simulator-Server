@@ -32,7 +32,6 @@ describe("health endpoints", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.status).toBe("ok");
-    expect(res.headers["x-request-id"]).toBeDefined();
     expect(queryRawMock).not.toHaveBeenCalled();
     expect(pingMock).not.toHaveBeenCalled();
   });
