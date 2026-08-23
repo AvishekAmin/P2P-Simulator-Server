@@ -1,0 +1,658 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RequisitionStatus {
+  CREATED
+  PROCESSING
+  REQUIREMENTS_EXTRACTED
+  SUPPLIER_SELECTED
+  PO_CREATED
+  NEEDS_CLARIFICATION
+  FAILED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SHIPPED
+  RECEIVED
+  COMPLETED
+  REJECTED
+}
+
+enum ShipmentStatus {
+  CREATED
+  IN_TRANSIT
+  DELIVERED
+}
+
+enum GoodsReceiptStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+}
+
+enum InvoiceStatus {
+  UPLOADED
+  PROCESSING
+  EXTRACTED
+  MATCHING
+  APPROVED
+  EXCEPTION
+  PAID
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  BLOCKED
+}
+
+enum ExceptionStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum ExceptionType {
+  REQUIREMENT_INCOMPLETE
+  NO_SUPPLIER_FOUND
+  PO_APPROVAL_REQUIRED
+  INVOICE_EXTRACTION_FAILED
+  QUANTITY_MISMATCH
+  PRICE_MISMATCH
+  SUPPLIER_MISMATCH
+  DUPLICATE_INVOICE
+  TAX_MISMATCH
+  TOTAL_MISMATCH
+  PAYMENT_FAILURE
+  SYSTEM_FAILURE
+}
+
+enum MatchStatus {
+  MATCHED
+  MISMATCHED
+}
+
+enum MatchCheckType {
+  SUPPLIER
+  PO_NUMBER
+  PRODUCT
+  ORDERED_QUANTITY
+  RECEIVED_QUANTITY
+  INVOICED_QUANTITY
+  UNIT_PRICE
+  SUBTOTAL
+  TAX
+  TOTAL
+  CURRENCY
+  DUPLICATE_INVOICE
+}
+
+enum Severity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum ActorType {
+  SYSTEM
+  AI
+  USER
+}
+
+enum AuditAction {
+  REQUISITION_CREATED
+  REQUIREMENTS_EXTRACTED
+  SUPPLIERS_DISCOVERED
+  SUPPLIER_SELECTED
+  PO_CREATED
+  PO_APPROVED
+  SHIPMENT_CREATED
+  GOODS_RECEIVED
+  INVOICE_UPLOADED
+  INVOICE_EXTRACTED
+  MATCH_STARTED
+  MATCH_COMPLETED
+  EXCEPTION_CREATED
+  EXCEPTION_RESOLVED
+  PAYMENT_APPROVED
+  PAYMENT_COMPLETED
+  WORKFLOW_FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id       String @id @default(cuid())
+  name     String
+  currency String @default("INR")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  suppliers          Supplier[]
+  products           Product[]
+  requisitions       Requisition[]
+  purchaseOrders     PurchaseOrder[]
+  shipments          Shipment[]
+  goodsReceipts      GoodsReceipt[]
+  invoices           Invoice[]
+  payments           Payment[]
+  exceptions         Exception[]
+  auditLogs          AuditLog[]
+  aiProcessingLogs   AIProcessingLog[]
+  supplierCandidates SupplierCandidate[]
+  sourcingDecisions  SourcingDecision[]
+}
+
+model Supplier {
+  id               String  @id @default(cuid())
+  organizationId   String
+  name             String
+  email            String?
+  phone            String?
+  rating           Float // 0-5
+  reliabilityScore Float // 0-1
+  isActive         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  supplierProducts   SupplierProduct[]
+  supplierCandidates SupplierCandidate[]
+  purchaseOrders     PurchaseOrder[]
+  invoices           Invoice[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Product {
+  id             String  @id @default(cuid())
+  organizationId String
+  sku            String
+  name           String
+  category       String
+  description    String?
+  unit           String  @default("unit")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  supplierProducts   SupplierProduct[]
+  purchaseOrderItems PurchaseOrderItem[]
+  receiptItems       ReceiptItem[]
+  invoiceItems       InvoiceItem[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId])
+  @@index([organizationId, category])
+}
+
+model SupplierProduct {
+  id               String @id @default(cuid())
+  supplierId       String
+  productId        String
+  unitPricePaise   Int
+  currency         String @default("INR")
+  stockQuantity    Int
+  deliveryDays     Int
+  minOrderQuantity Int    @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+
+  supplierCandidates SupplierCandidate[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@unique([supplierId, productId])
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Sourcing
+// ---------------------------------------------------------------------------
+
+model Requisition {
+  id             String            @id @default(cuid())
+  organizationId String
+  rawInput       String
+  status         RequisitionStatus @default(CREATED)
+  failureReason  String?
+  createdBy      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  requirement        Requirement?
+  supplierCandidates SupplierCandidate[]
+  sourcingDecision   SourcingDecision?
+  purchaseOrder      PurchaseOrder?
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model Requirement {
+  id                   String   @id @default(cuid())
+  requisitionId        String   @unique
+  productName          String
+  category             String?
+  quantity             Int
+  maxUnitPricePaise    Int?
+  deliveryDeadlineDays Int?
+  deliveryLocation     String?
+  specifications       Json?
+  currency             String   @default("INR")
+  confidence           Float?
+  missingFields        String[] @default([])
+  rawExtraction        Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requisition Requisition @relation(fields: [requisitionId], references: [id])
+}
+
+model SupplierCandidate {
+  id                String  @id @default(cuid())
+  organizationId    String
+  requisitionId     String
+  supplierId        String
+  supplierProductId String?
+  eligible          Boolean
+  ineligibleReason  String?
+  priceScore        Float
+  deliveryScore     Float
+  reliabilityScore  Float
+  ratingScore       Float
+  stockScore        Float
+  totalScore        Float
+  rank              Int
+  unitPricePaise    Int
+  deliveryDays      Int
+  availableStock    Int
+
+  createdAt DateTime @default(now())
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  requisition     Requisition      @relation(fields: [requisitionId], references: [id])
+  supplier        Supplier         @relation(fields: [supplierId], references: [id])
+  supplierProduct SupplierProduct? @relation(fields: [supplierProductId], references: [id])
+
+  @@unique([requisitionId, supplierId])
+  @@index([organizationId])
+}
+
+model SourcingDecision {
+  id                        String  @id @default(cuid())
+  organizationId            String
+  requisitionId             String  @unique
+  selectedSupplierId        String
+  selectedSupplierProductId String
+  totalScore                Float
+  candidatesEvaluated       Int
+  rationale                 String?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  requisition  Requisition  @relation(fields: [requisitionId], references: [id])
+
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Purchasing
+// ---------------------------------------------------------------------------
+
+model PurchaseOrder {
+  id                   String              @id @default(cuid())
+  organizationId       String
+  poNumber             String
+  requisitionId        String              @unique
+  supplierId           String
+  status               PurchaseOrderStatus @default(DRAFT)
+  subtotalPaise        Int
+  taxPaise             Int
+  totalPaise           Int
+  taxRateBps           Int // e.g. 1800 = 18%
+  currency             String              @default("INR")
+  expectedDeliveryDate DateTime?
+  approvedAt           DateTime?
+  approvedBy           String?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  requisition  Requisition  @relation(fields: [requisitionId], references: [id])
+  supplier     Supplier     @relation(fields: [supplierId], references: [id])
+
+  items    PurchaseOrderItem[]
+  shipment Shipment?
+  invoices Invoice[]
+
+  @@unique([organizationId, poNumber])
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model PurchaseOrderItem {
+  id                String  @id @default(cuid())
+  purchaseOrderId   String
+  productId         String
+  supplierProductId String?
+  description       String
+  quantity          Int
+  unitPricePaise    Int
+  lineTotalPaise    Int
+
+  createdAt DateTime @default(now())
+
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product         Product          @relation(fields: [productId], references: [id])
+  supplierProduct SupplierProduct? @relation(fields: [supplierProductId], references: [id])
+
+  receiptItems ReceiptItem[]
+
+  @@unique([purchaseOrderId, productId])
+}
+
+// ---------------------------------------------------------------------------
+// Fulfilment
+// ---------------------------------------------------------------------------
+
+model Shipment {
+  id                   String         @id @default(cuid())
+  organizationId       String
+  purchaseOrderId      String         @unique
+  trackingNumber       String
+  carrier              String?
+  status               ShipmentStatus @default(CREATED)
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  expectedDeliveryDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  goodsReceipt GoodsReceipt?
+
+  @@unique([organizationId, trackingNumber])
+  @@index([organizationId])
+}
+
+model GoodsReceipt {
+  id              String             @id @default(cuid())
+  organizationId  String
+  purchaseOrderId String
+  shipmentId      String             @unique
+  status          GoodsReceiptStatus
+  receivedAt      DateTime
+  receivedBy      String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  shipment     Shipment     @relation(fields: [shipmentId], references: [id])
+
+  items         ReceiptItem[]
+  threeWayMatch ThreeWayMatch[]
+
+  @@index([organizationId])
+  @@index([purchaseOrderId])
+}
+
+model ReceiptItem {
+  id                  String @id @default(cuid())
+  goodsReceiptId      String
+  purchaseOrderItemId String
+  productId           String
+  orderedQuantity     Int
+  receivedQuantity    Int
+  damagedQuantity     Int
+  acceptedQuantity    Int
+
+  createdAt DateTime @default(now())
+
+  goodsReceipt      GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
+  product           Product           @relation(fields: [productId], references: [id])
+
+  @@unique([goodsReceiptId, purchaseOrderItemId])
+}
+
+// ---------------------------------------------------------------------------
+// Invoicing & settlement
+// ---------------------------------------------------------------------------
+
+model Invoice {
+  id              String        @id @default(cuid())
+  organizationId  String
+  purchaseOrderId String
+  supplierId      String?
+  status          InvoiceStatus @default(UPLOADED)
+
+  fileUrl       String
+  filePublicId  String
+  fileMimeType  String
+  fileSizeBytes Int
+
+  invoiceNumber      String?
+  invoiceDate        DateTime?
+  supplierNameRaw    String?
+  poNumberRaw        String?
+  subtotalPaise      Int?
+  taxPaise           Int?
+  totalPaise         Int?
+  currency           String?
+  extractedAt        DateTime?
+  rawExtraction      Json?
+  extractionAttempts Int       @default(0)
+  failureReason      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  supplier      Supplier?     @relation(fields: [supplierId], references: [id])
+
+  items         InvoiceItem[]
+  threeWayMatch ThreeWayMatch?
+  payment       Payment?
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, invoiceNumber])
+  @@index([purchaseOrderId])
+}
+
+model InvoiceItem {
+  id             String  @id @default(cuid())
+  invoiceId      String
+  lineNumber     Int
+  description    String
+  quantity       Int
+  unitPricePaise Int
+  lineTotalPaise Int
+  productId      String?
+
+  createdAt DateTime @default(now())
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@unique([invoiceId, lineNumber])
+}
+
+model ThreeWayMatch {
+  id              String      @id @default(cuid())
+  organizationId  String
+  invoiceId       String      @unique
+  purchaseOrderId String
+  goodsReceiptId  String?
+  status          MatchStatus
+  totalChecks     Int
+  passedChecks    Int
+  failedChecks    Int
+  matchedAt       DateTime
+
+  createdAt DateTime @default(now())
+
+  invoice      Invoice       @relation(fields: [invoiceId], references: [id])
+  goodsReceipt GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
+
+  checks MatchCheck[]
+
+  @@index([organizationId])
+  @@index([purchaseOrderId])
+}
+
+model MatchCheck {
+  id              String         @id @default(cuid())
+  threeWayMatchId String
+  checkType       MatchCheckType
+  expected        String
+  actual          String
+  passed          Boolean
+  variance        Float?
+  severity        Severity
+
+  createdAt DateTime @default(now())
+
+  threeWayMatch ThreeWayMatch @relation(fields: [threeWayMatchId], references: [id], onDelete: Cascade)
+
+  @@unique([threeWayMatchId, checkType])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  organizationId    String
+  invoiceId         String        @unique
+  purchaseOrderId   String?
+  amountPaise       Int
+  currency          String        @default("INR")
+  status            PaymentStatus @default(PENDING)
+  provider          String        @default("SIMULATED")
+  providerReference String?
+  blockedReason     String?
+  failureReason     String?
+  processedAt       DateTime?
+  completedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Cross-cutting
+// ---------------------------------------------------------------------------
+
+model Exception {
+  id               String          @id @default(cuid())
+  organizationId   String
+  type             ExceptionType
+  status           ExceptionStatus @default(OPEN)
+  severity         Severity
+  entityType       String
+  entityId         String
+  title            String
+  description      String
+  metadata         Json?
+  resolution       String?
+  resolutionReason String?
+  resolvedAt       DateTime?
+  resolvedBy       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, type, entityId])
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  organizationId String
+  actorType      ActorType
+  actorId        String?
+  action         AuditAction
+  entityType     String
+  entityId       String
+  metadata       Json?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model AIProcessingLog {
+  id             String  @id @default(cuid())
+  organizationId String
+  entityType     String
+  entityId       String
+  jobType        String
+  model          String
+  promptVersion  String
+  success        Boolean
+  latencyMs      Int
+  error          String?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, jobType])
+  @@index([entityType, entityId])
+}
