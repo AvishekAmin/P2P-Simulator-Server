@@ -1,31 +1,35 @@
-import { Queue } from "bullmq";
-import { DEFAULT_JOB_OPTIONS, QUEUE_NAMES, type QueueName } from "../config/constants.js";
-import { redis } from "../config/redis.js";
-import type {
-  InvoiceJob,
-  MatchingJob,
-  PaymentJob,
-  PurchaseOrderJob,
-  RequisitionJob,
-  SupplierDiscoveryJob,
-} from "../types/types.js";
+export { closeQueues } from "./connection.js";
+export { enqueueInvoice, INVOICE_JOBS, invoiceQueue } from "./invoice.queue.js";
+export { enqueueMatching, MATCHING_JOBS, matchingQueue } from "./matching.queue.js";
+export { enqueuePayment, PAYMENT_JOBS, paymentQueue } from "./payment.queue.js";
+export {
+  enqueuePurchaseOrder,
+  PURCHASE_ORDER_JOBS,
+  purchaseOrderQueue,
+} from "./purchaseOrder.queue.js";
+export {
+  enqueueRequisition,
+  REQUISITION_JOBS,
+  requisitionQueue,
+} from "./requisition.queue.js";
+export {
+  enqueueSupplierDiscovery,
+  SUPPLIER_DISCOVERY_JOBS,
+  supplierDiscoveryQueue,
+} from "./supplier.queue.js";
 
-function createQueue<T>(name: QueueName): Queue<T> {
-  return new Queue<T>(name, {
-    connection: redis,
-    defaultJobOptions: DEFAULT_JOB_OPTIONS,
-  });
-}
+import { invoiceQueue } from "./invoice.queue.js";
+import { matchingQueue } from "./matching.queue.js";
+import { paymentQueue } from "./payment.queue.js";
+import { purchaseOrderQueue } from "./purchaseOrder.queue.js";
+import { requisitionQueue } from "./requisition.queue.js";
+import { supplierDiscoveryQueue } from "./supplier.queue.js";
 
 export const QUEUES = {
-  requisition: createQueue<RequisitionJob>(QUEUE_NAMES.REQUISITION),
-  supplierDiscovery: createQueue<SupplierDiscoveryJob>(QUEUE_NAMES.SUPPLIER_DISCOVERY),
-  purchaseOrder: createQueue<PurchaseOrderJob>(QUEUE_NAMES.PURCHASE_ORDER),
-  invoice: createQueue<InvoiceJob>(QUEUE_NAMES.INVOICE),
-  matching: createQueue<MatchingJob>(QUEUE_NAMES.MATCHING),
-  payment: createQueue<PaymentJob>(QUEUE_NAMES.PAYMENT),
+  requisition: requisitionQueue,
+  supplierDiscovery: supplierDiscoveryQueue,
+  purchaseOrder: purchaseOrderQueue,
+  invoice: invoiceQueue,
+  matching: matchingQueue,
+  payment: paymentQueue,
 } as const;
-
-export async function closeQueues(): Promise<void> {
-  await Promise.all(Object.values(QUEUES).map((queue) => queue.close()));
-}
