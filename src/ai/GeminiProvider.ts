@@ -7,7 +7,7 @@ import type {
   GenerateStructuredOptions,
 } from "./AIProvider.js";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+export const DEFAULT_MODEL = "gemini-3.6-flash";
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export class GeminiProvider implements AIProvider {

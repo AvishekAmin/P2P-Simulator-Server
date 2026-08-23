@@ -121,8 +121,14 @@ enum ActorType {
   USER
 }
 
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
 enum AuditAction {
   REQUISITION_CREATED
+  REQUISITION_CLARIFICATION_REQUESTED
   REQUIREMENTS_EXTRACTED
   SUPPLIERS_DISCOVERED
   SUPPLIER_SELECTED
@@ -249,17 +255,42 @@ model Requisition {
   failureReason  String?
   createdBy      String?
 
+  // Conversational clarification state. The requirements are extracted over one
+  // or more chat turns, so partial progress lives here until every required
+  // field is present — Requirement itself is only created once it is complete.
+  draftRequirements    Json?
+  clarificationMessage String?
+  missingFields        String[] @default([])
+  conflicts            String[] @default([])
+  turnCount            Int      @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organization       Organization        @relation(fields: [organizationId], references: [id])
+  organization       Organization         @relation(fields: [organizationId], references: [id])
   requirement        Requirement?
+  messages           RequisitionMessage[]
   supplierCandidates SupplierCandidate[]
   sourcingDecision   SourcingDecision?
   purchaseOrder      PurchaseOrder?
 
   @@index([organizationId])
   @@index([organizationId, status])
+}
+
+model RequisitionMessage {
+  id             String      @id @default(cuid())
+  organizationId String
+  requisitionId  String
+  role           MessageRole
+  content        String
+
+  createdAt DateTime @default(now())
+
+  requisition Requisition @relation(fields: [requisitionId], references: [id])
+
+  @@index([requisitionId, createdAt])
+  @@index([organizationId])
 }
 
 model Requirement {
