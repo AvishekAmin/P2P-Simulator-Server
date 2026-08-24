@@ -34,7 +34,7 @@ The client never triggers discovery. After `POST /requisitions` (or `.../message
 | `NEEDS_CLARIFICATION` | The chat is still open — render `clarificationMessage`, keep the composer active |
 | `REQUIREMENTS_EXTRACTED` | Sourcing is running — spinner. **Keep polling.** |
 | `SUPPLIER_SELECTED` | Done — render `sourcing` + the `supplierCandidates` table |
-| `PO_CREATED` | Purchase order exists (next phase); `sourcing` still populated |
+| `PO_CREATED` | Purchase order exists — see `api-docs/purchase-orders-api.md`; `sourcing` still populated |
 | `FAILED` | Render `failureReason` and the rejected `supplierCandidates` |
 
 Discovery normally completes in a few seconds, most of it the Gemini call that writes the rationale.

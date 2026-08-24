@@ -57,6 +57,7 @@ function row(overrides: Record<string, unknown> = {}) {
       createdAt: new Date("2026-08-23T22:02:24.576Z"),
     },
     supplierCandidates: [candidate()],
+    purchaseOrder: null,
     ...overrides,
   };
 }
@@ -190,5 +191,43 @@ describe("getRequisition — sourcing view", () => {
 
     expect(detail).not.toHaveProperty("sourcingDecision");
     expect(detail).toHaveProperty("sourcing");
+  });
+});
+
+describe("getRequisition — purchase order view", () => {
+  it("inlines the purchase order so the frontend needs no second request", async () => {
+    findFirst.mockResolvedValue(
+      row({
+        status: "PO_CREATED",
+        purchaseOrder: {
+          id: "po-1",
+          poNumber: "PO-20260824-ABC123",
+          status: "PENDING_APPROVAL",
+          subtotalPaise: 18_200_000,
+          taxPaise: 3_276_000,
+          totalPaise: 21_476_000,
+          supplier: { id: "sup-techsource", name: "TechSource Distributors" },
+          items: [{ id: "poi-1", quantity: 100, unitPricePaise: 182_000 }],
+        },
+      }),
+    );
+
+    const detail = await getRequisition({ organizationId: ORG, requisitionId: REQ });
+
+    expect(detail.status).toBe("PO_CREATED");
+    expect(detail.purchaseOrder).toMatchObject({
+      poNumber: "PO-20260824-ABC123",
+      status: "PENDING_APPROVAL",
+      totalPaise: 21_476_000,
+      supplier: { name: "TechSource Distributors" },
+    });
+  });
+
+  it("returns a null purchase order before one exists", async () => {
+    findFirst.mockResolvedValue(row());
+
+    const detail = await getRequisition({ organizationId: ORG, requisitionId: REQ });
+
+    expect(detail.purchaseOrder).toBeNull();
   });
 });

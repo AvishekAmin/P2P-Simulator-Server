@@ -35,6 +35,14 @@ export const SUPPLIER_SCORE_WEIGHTS = {
   STOCK: 0.1,
 } as const;
 
+// GST applied to every purchase order, in basis points (1800 = 18%).
+// Deterministic TypeScript owns every money calculation — Gemini never sees one.
+export const DEFAULT_TAX_RATE_BPS = 1800;
+
+// MVP demo: every purchase order waits for a human approval, so the thresholds
+// below are inert. Flip this to true to let src/rules/approvalRules.ts apply them.
+export const PO_AUTO_APPROVE_ENABLED = false;
+
 // PO approval thresholds, in paise.
 export const APPROVAL_THRESHOLDS_PAISE = {
   AUTO_APPROVE_BELOW: 100_000_00,
