@@ -94,7 +94,7 @@ Every BullMQ job can run more than once, and a client can double-click Approve.
 | Risk | Guard |
 | --- | --- |
 | Two purchase orders for one requisition | `@@unique` on `PurchaseOrder.requisitionId`, plus a guarded `updateMany` claiming `SUPPLIER_SELECTED → PO_CREATED`; the loser writes nothing and the worker reports `skipped` |
-| A retry racing the PO number | `poNumber = PO-<YYYYMMDD>-<6-char hash of the full requisitionId>` — derived from a unique id, so a retry regenerates the identical value instead of racing `@@unique([organizationId, poNumber])`, and hashing the whole id (rather than slicing its tail) keeps two different requisitions from colliding |
+| A retry racing the PO number | `poNumber = PO-<YYYYMMDD>-<12-char SHA-256 digest of the full requisitionId>` — derived from a unique id, so a retry regenerates the identical value instead of racing `@@unique([organizationId, poNumber])`, and a wide cryptographic digest over the whole id keeps two different requisitions from colliding on a number no retry could ever get past |
 | Two shipments for one approval | `shipment.upsert` on the unique `purchaseOrderId` with an **empty** `update`, so an existing shipment is reused and a `DELIVERED` one is never dragged back to `IN_TRANSIT` |
 | Duplicate audit rows | Audits are written only on the branch that actually transitioned; a repeat approve/reject returns early |
 | Duplicate approval exceptions | `recordException` upserts on `[organizationId, type, entityId]` |

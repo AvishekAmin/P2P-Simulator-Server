@@ -136,7 +136,7 @@ describe("processPurchaseOrderJob — happy path", () => {
     });
     // Derived from the whole requisition id, so a retry regenerates the same
     // number and two ids sharing a tail cannot collide.
-    expect(data.poNumber).toMatch(/^PO-\d{8}-[0-9A-Z]{6}$/);
+    expect(data.poNumber).toMatch(/^PO-\d{8}-[0-9A-Z]{12}$/);
     const now = new Date();
     expect(data.poNumber).toBe(buildPoNumber(REQ, now));
   });

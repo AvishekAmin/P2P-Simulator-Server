@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { prisma } from "../config/prisma.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import {
@@ -187,20 +188,19 @@ function yyyymmdd(date: Date): string {
 /**
  * Deterministic fixed-width suffix over the *whole* id.
  *
- * A trailing slice would only distinguish ids by their last few characters, so
- * two different requisitions sharing that tail would collide on
- * @@unique([organizationId, poNumber]). FNV-1a over the full id spreads every
- * character into the suffix while staying a pure function of the id, which is
- * what makes a retry regenerate the identical value.
+ * SHA-256 rather than a short non-cryptographic hash: the suffix is the only
+ * thing distinguishing two purchase orders issued on the same day within one
+ * organization, and a collision there is unrecoverable — the number is a pure
+ * function of the id, so every retry regenerates the same colliding value and
+ * @@unique([organizationId, poNumber]) rejects the insert forever. At the
+ * widths used below the digest space is large enough (>2^60) that a collision
+ * is not a practical concern, while a retry still reproduces the value exactly.
+ *
+ * Base36 keeps the output alphanumeric and human-readable on a printed PO.
  */
 function idSuffix(id: string, length: number): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < id.length; i += 1) {
-    hash ^= id.charCodeAt(i);
-    // FNV prime, via shifts so the whole thing stays inside 32-bit math.
-    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
-  }
-  return hash.toString(36).toUpperCase().padStart(length, "0").slice(-length);
+  const digest = createHash("sha256").update(id, "utf8").digest("hex");
+  return BigInt(`0x${digest}`).toString(36).toUpperCase().padStart(length, "0").slice(0, length);
 }
 
 /**
@@ -209,12 +209,12 @@ function idSuffix(id: string, length: number): string {
  * @@unique([organizationId, poNumber]) with a fresh random suffix.
  */
 export function buildPoNumber(requisitionId: string, now: Date): string {
-  return `PO-${yyyymmdd(now)}-${idSuffix(requisitionId, 6)}`;
+  return `PO-${yyyymmdd(now)}-${idSuffix(requisitionId, 12)}`;
 }
 
 /** Same reasoning as buildPoNumber, against @@unique([organizationId, trackingNumber]). */
 export function buildTrackingNumber(purchaseOrderId: string): string {
-  return `TRK-${idSuffix(purchaseOrderId, 8)}`;
+  return `TRK-${idSuffix(purchaseOrderId, 16)}`;
 }
 
 export function addDays(from: Date, days: number): Date {
