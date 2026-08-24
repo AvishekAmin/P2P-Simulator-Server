@@ -238,6 +238,11 @@ describe("CloudinaryStorage", () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body });
       vi.stubGlobal("fetch", fetchMock);
 
+      // Pin Date.now() so the expires_at calculation is deterministic.
+      const fixedNowMs = 1_700_000_000_000;
+      const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(fixedNowMs);
+      const expectedExpiresAt = Math.floor(fixedNowMs / 1000) + 300;
+
       const result = await storage.download("p2p/invoices/inv-001/receipt", "application/pdf");
 
       expect(result.equals(body)).toBe(true);
@@ -250,11 +255,17 @@ describe("CloudinaryStorage", () => {
       expect(mockPrivateDownloadUrl).toHaveBeenCalledWith(
         "p2p/invoices/inv-001/receipt",
         "pdf",
-        expect.objectContaining({ type: "authenticated", resource_type: "image" }),
+        expect.objectContaining({
+          type: "authenticated",
+          resource_type: "image",
+          expires_at: expectedExpiresAt,
+        }),
       );
 
+      dateNowSpy.mockRestore();
       vi.unstubAllGlobals();
     });
+
 
     it("reports a missing object as NOT_FOUND so the caller does not retry it", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));

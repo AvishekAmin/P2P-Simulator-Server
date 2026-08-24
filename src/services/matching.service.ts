@@ -118,12 +118,24 @@ export async function loadMatchingContext(params: {
 }
 
 /**
+ * Canonical normalization for invoice numbers: lower-case, strip everything
+ * that is not a letter or digit. Mirrors normalize() in src/rules/threeWayMatch.ts
+ * and must stay in sync with it; exported so writers (e.g. invoice.service.ts)
+ * can produce the same value when persisting the field.
+ */
+export function normalizeInvoiceNumber(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
  * Invoices this organization has already recorded under the same number.
  *
- * Deliberately narrow: checkDuplicateInvoice() compares normalized invoice
- * numbers, so an exact-match prefilter on the @@index([organizationId,
- * invoiceNumber]) finds every candidate without loading the org's whole invoice
- * history into memory.
+ * Queries the persisted `normalizedInvoiceNumber` column so the index on
+ * @@index([organizationId, normalizedInvoiceNumber]) is used and format
+ * variants (e.g. "INV-001" vs "inv001") are unified in the DB rather than
+ * in application memory. Falls back to an empty result when the invoice
+ * number is absent (an unnumbered document is caught separately by
+ * checkDuplicateInvoice).
  */
 export function loadPriorInvoices(params: {
   organizationId: string;
@@ -134,11 +146,13 @@ export function loadPriorInvoices(params: {
     return Promise.resolve([]);
   }
 
+  const normalized = normalizeInvoiceNumber(params.invoiceNumber);
+
   return prisma.invoice.findMany({
     where: {
       organizationId: params.organizationId,
       id: { not: params.invoiceId },
-      invoiceNumber: params.invoiceNumber,
+      normalizedInvoiceNumber: normalized,
     },
     select: { id: true, invoiceNumber: true },
   });

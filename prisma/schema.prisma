@@ -506,8 +506,9 @@ model Invoice {
   fileMimeType  String
   fileSizeBytes Int
 
-  invoiceNumber      String?
-  invoiceDate        DateTime?
+  invoiceNumber           String?
+  normalizedInvoiceNumber String?
+  invoiceDate             DateTime?
   supplierNameRaw    String?
   poNumberRaw        String?
   subtotalPaise      Int?
@@ -533,6 +534,7 @@ model Invoice {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, invoiceNumber])
+  @@index([organizationId, normalizedInvoiceNumber])
   @@index([purchaseOrderId])
 }
 

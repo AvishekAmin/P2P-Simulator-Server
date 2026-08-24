@@ -193,10 +193,18 @@ export async function applyPaymentCompletion(params: {
       return false;
     }
 
-    await tx.invoice.updateMany({
+    const invoiceUpdate = await tx.invoice.updateMany({
       where: { id: invoiceId, organizationId, status: InvoiceStatus.APPROVED },
       data: { status: InvoiceStatus.PAID },
     });
+
+    if (invoiceUpdate.count === 0) {
+      console.warn(
+        `Invoice ${invoiceId}: payment completed (ref: ${providerReference}) but invoice was not` +
+          ` in APPROVED state — no status transition applied. Manual reconciliation may be needed.`,
+      );
+    }
+
 
     await recordAudit(tx, {
       organizationId,

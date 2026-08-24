@@ -13,6 +13,7 @@ import type { InvoiceExtraction } from "../zod/invoice.schema.js";
 import { toInvoiceDate, toPaise } from "../zod/invoice.schema.js";
 import { recordAudit } from "./audit.service.js";
 import { recordException } from "./exception.service.js";
+import { normalizeInvoiceNumber } from "./matching.service.js";
 
 const INVOICE_ENTITY = "Invoice";
 
@@ -324,6 +325,8 @@ export async function applyInvoiceExtraction(params: {
       data: {
         status: InvoiceStatus.EXTRACTED,
         invoiceNumber: result.invoiceNumber,
+        normalizedInvoiceNumber:
+          result.invoiceNumber != null ? normalizeInvoiceNumber(result.invoiceNumber) : null,
         invoiceDate: toInvoiceDate(result.invoiceDate),
         supplierNameRaw: result.supplierName,
         poNumberRaw: result.poNumber,

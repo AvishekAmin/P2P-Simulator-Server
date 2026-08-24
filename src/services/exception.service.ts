@@ -255,8 +255,11 @@ export async function resolveExceptionById(
       });
     }
 
-    const resolved = await tx.exception.update({
-      where: { id: exceptionId },
+    const conditionalUpdate = await tx.exception.updateMany({
+      where: {
+        id: exceptionId,
+        status: { in: [ExceptionStatus.OPEN, ExceptionStatus.UNDER_REVIEW] },
+      },
       data: {
         status: decision === "APPROVE" ? ExceptionStatus.RESOLVED : ExceptionStatus.REJECTED,
         resolution: decision,
@@ -264,6 +267,24 @@ export async function resolveExceptionById(
         resolvedAt: new Date(),
         resolvedBy: actorId,
       },
+    });
+
+    if (conditionalUpdate.count === 0) {
+      // Re-fetch to surface the current status in the error (the earlier read
+      // may have raced with a concurrent resolution that already committed).
+      const current = await tx.exception.findFirst({
+        where: { id: exceptionId, organizationId },
+        select: { status: true },
+      });
+      const currentStatus = current?.status ?? exception.status;
+      throw AppError.invalidState(`Exception is already ${currentStatus}`, {
+        exceptionId,
+        status: currentStatus,
+      });
+    }
+
+    const resolved = await tx.exception.findUniqueOrThrow({
+      where: { id: exceptionId },
       select: exceptionViewSelect,
     });
 
