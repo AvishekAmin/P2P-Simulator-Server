@@ -8,7 +8,7 @@ const db = {
   supplierProduct: { findFirst: vi.fn() },
   purchaseOrder: { create: vi.fn(), findMany: vi.fn() },
   shipment: { upsert: vi.fn() },
-  exception: { upsert: vi.fn() },
+  exception: { upsert: vi.fn(), findUnique: vi.fn() },
   auditLog: { create: vi.fn() },
 };
 
@@ -108,6 +108,7 @@ beforeEach(() => {
     Promise.resolve({ id: "po-1", poNumber: "PO-X", totalPaise: 21_476_000 }),
   );
   db.exception.upsert.mockResolvedValue({ id: "exc-1" });
+  db.exception.findUnique.mockResolvedValue(null);
   db.shipment.upsert.mockResolvedValue({ id: "ship-1", trackingNumber: "TRK-PO-1" });
 });
 
