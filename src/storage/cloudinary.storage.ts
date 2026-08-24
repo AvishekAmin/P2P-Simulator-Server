@@ -33,6 +33,12 @@ const SIGNATURE_CHECKS: Record<AllowedMimeType, (buffer: Buffer) => boolean> = {
     buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
 };
 
+/**
+ * How long a minted download link stays valid. Generous enough to survive a slow
+ * Gemini Vision round trip, short enough that a leaked link expires quickly.
+ */
+const DOWNLOAD_LINK_TTL_SECONDS = 300;
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -163,14 +169,27 @@ export class CloudinaryStorage implements StorageProvider {
   /**
    * Fetch a stored document back as raw bytes.
    *
-   * Assets are uploaded with `type: "authenticated"`, so the signed URL from
-   * getUrl() is the only way to read them — an unsigned delivery URL 401s.
+   * Deliberately NOT the signed delivery URL from getUrl(). Cloudinary accounts
+   * block PDF and ZIP *delivery* by default, and that restriction answers 401
+   * however well-signed the delivery URL is — so a PDF invoice, which is most of
+   * them, could never be read back. private_download_url() is the Admin API
+   * download link for the original asset: it is signed with the API secret,
+   * bypasses the delivery-format restriction entirely, and returns the exact
+   * bytes that were uploaded rather than a re-encoded derivative.
+   *
+   * The link is short-lived because it is minted per call and used immediately.
    */
   async download(storageKey: string, mimeType: string): Promise<Buffer> {
     let response: Response;
 
+    const url = cloudinary.utils.private_download_url(storageKey, formatForMimeType(mimeType), {
+      resource_type: "image",
+      type: "authenticated",
+      expires_at: Math.floor(Date.now() / 1000) + DOWNLOAD_LINK_TTL_SECONDS,
+    });
+
     try {
-      response = await fetch(this.getUrl(storageKey, mimeType));
+      response = await fetch(url);
     } catch (error) {
       throw AppError.dependencyUnavailable("Failed to download document from Cloudinary", {
         cause: error instanceof Error ? error.message : error,

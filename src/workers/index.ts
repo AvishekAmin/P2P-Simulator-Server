@@ -4,6 +4,8 @@ import { QUEUE_NAMES, type QueueName } from "../config/constants.js";
 import { disconnectPrisma } from "../config/prisma.js";
 import { createRedisConnection } from "../config/redis.js";
 import { processInvoiceJob } from "./invoice.worker.js";
+import { processMatchingJob } from "./matching.worker.js";
+import { processPaymentJob } from "./payment.worker.js";
 import { processPurchaseOrderJob } from "./purchaseOrder.worker.js";
 import { processRequisitionJob } from "./requisition.worker.js";
 import { processSupplierDiscoveryJob } from "./supplierDiscovery.worker.js";
@@ -16,6 +18,8 @@ const PROCESSORS: Partial<Record<QueueName, Processor>> = {
   [QUEUE_NAMES.SUPPLIER_DISCOVERY]: processSupplierDiscoveryJob,
   [QUEUE_NAMES.PURCHASE_ORDER]: processPurchaseOrderJob,
   [QUEUE_NAMES.INVOICE]: processInvoiceJob,
+  [QUEUE_NAMES.MATCHING]: processMatchingJob,
+  [QUEUE_NAMES.PAYMENT]: processPaymentJob,
 };
 
 function startWorkers(): Worker[] {
