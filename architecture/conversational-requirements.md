@@ -141,7 +141,10 @@ src/routes/requisition.routes.ts
 - Gemini is only ever called from the worker; the API blocks on the job result via BullMQ
   `QueueEvents`, not by doing AI work inline (CLAUDE.md rules 9/13).
 - The worker is idempotent: a requisition already at `REQUIREMENTS_EXTRACTED` short-circuits
-  before calling Gemini or re-enqueueing supplier discovery.
-- Supplier-discovery processing itself, Socket.IO events, and a `REQUIREMENT_INCOMPLETE`
-  exception path are out of scope here — clarification is a normal conversational state, not an
-  exception.
+  before calling Gemini. It does re-enqueue supplier discovery on that path — the job is added
+  after the extraction transaction commits, so a Redis failure in that window would otherwise
+  leave extracted requirements with no job behind them (see
+  [Phase 5](./supplier-discovery.md#idempotency--concurrency)).
+- Socket.IO events and a `REQUIREMENT_INCOMPLETE` exception path are out of scope here —
+  clarification is a normal conversational state, not an exception. Supplier-discovery processing
+  is covered in [Phase 5](./supplier-discovery.md).

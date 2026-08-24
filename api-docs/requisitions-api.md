@@ -259,8 +259,17 @@ interface RequisitionDetail {
   updatedAt: string;                         // ISO 8601
   requirement: RequirementCreateInput | null; // null until status = REQUIREMENTS_EXTRACTED
   messages: RequisitionMessage[];             // full transcript, ascending createdAt
+
+  // Supplier discovery (Phase 5) — see api-docs/sourcing-api.md for full types
+  sourcing: Sourcing | null;                  // the committed decision; null until SUPPLIER_SELECTED
+  supplierCandidates: SupplierCandidate[];    // every supplier evaluated, ranked; [] until discovery runs
 }
 ```
+
+`sourcing` and `supplierCandidates` are populated automatically by the supplier-discovery worker
+once requirements are complete — no client call triggers them. Poll this endpoint while `status` is
+`REQUIREMENTS_EXTRACTED`. Both fields, the ranking semantics, and the failure shapes are documented
+in [`api-docs/sourcing-api.md`](./sourcing-api.md).
 
 ### Errors
 
@@ -301,7 +310,8 @@ interface RequisitionListResponse {
 }
 ```
 
-Note: list items do not include `messages` or `requirement` — fetch `GET /:id` for those.
+Note: list items do not include `messages`, `requirement`, `sourcing`, or `supplierCandidates` —
+fetch `GET /:id` for those.
 
 ### Errors
 

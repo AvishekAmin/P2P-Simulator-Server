@@ -36,6 +36,13 @@ export async function processRequisitionJob(job: Job): Promise<RequisitionChatRe
   // Idempotency: BullMQ may run a job more than once. Once requirements are
   // extracted the conversation is closed — never call Gemini again.
   if (requisition.status === "REQUIREMENTS_EXTRACTED") {
+    // Discovery is enqueued after the extraction transaction commits, so a
+    // Redis failure in that window leaves extracted requirements with no job
+    // behind them. Still being REQUIREMENTS_EXTRACTED means discovery has not
+    // completed, so re-enqueuing here heals that gap rather than returning
+    // early and stranding the requisition.
+    await enqueueSupplierDiscovery({ requisitionId, organizationId });
+
     return {
       requisitionId,
       status: "REQUIREMENTS_EXTRACTED",

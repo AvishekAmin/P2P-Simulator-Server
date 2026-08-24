@@ -62,6 +62,97 @@ const requisitionSelect = {
   messages: { select: messageSelect, orderBy: { createdAt: "asc" } },
 } satisfies Prisma.RequisitionSelect;
 
+/**
+ * The read path additionally returns the sourcing outcome. Kept separate from
+ * requisitionSelect so the extraction worker, which only needs the
+ * conversation, does not pay for these joins on every job.
+ */
+const requisitionDetailSelect = {
+  ...requisitionSelect,
+  sourcingDecision: {
+    select: {
+      selectedSupplierId: true,
+      selectedSupplierProductId: true,
+      totalScore: true,
+      candidatesEvaluated: true,
+      rationale: true,
+      createdAt: true,
+    },
+  },
+  supplierCandidates: {
+    orderBy: { rank: "asc" },
+    select: {
+      supplierId: true,
+      rank: true,
+      eligible: true,
+      ineligibleReason: true,
+      unitPricePaise: true,
+      deliveryDays: true,
+      availableStock: true,
+      priceScore: true,
+      deliveryScore: true,
+      reliabilityScore: true,
+      ratingScore: true,
+      stockScore: true,
+      totalScore: true,
+      supplier: { select: { id: true, name: true } },
+    },
+  },
+} satisfies Prisma.RequisitionSelect;
+
+type RequisitionDetailRow = Prisma.RequisitionGetPayload<{
+  select: typeof requisitionDetailSelect;
+}>;
+
+/**
+ * Flattens the sourcing rows into the shape a client renders directly.
+ *
+ * SourcingDecision.selectedSupplierId is a plain column with no relation, so
+ * the supplier's name is resolved from the ranked candidates rather than making
+ * the client join the two lists itself.
+ */
+function toSourcingView(requisition: RequisitionDetailRow) {
+  const supplierCandidates = requisition.supplierCandidates.map((candidate) => ({
+    supplierId: candidate.supplierId,
+    supplierName: candidate.supplier.name,
+    rank: candidate.rank,
+    eligible: candidate.eligible,
+    ineligibleReason: candidate.ineligibleReason,
+    unitPricePaise: candidate.unitPricePaise,
+    deliveryDays: candidate.deliveryDays,
+    availableStock: candidate.availableStock,
+    scores: {
+      price: candidate.priceScore,
+      delivery: candidate.deliveryScore,
+      reliability: candidate.reliabilityScore,
+      rating: candidate.ratingScore,
+      stock: candidate.stockScore,
+      total: candidate.totalScore,
+    },
+  }));
+
+  const decision = requisition.sourcingDecision;
+  const winner = supplierCandidates.find(
+    (candidate) => candidate.supplierId === decision?.selectedSupplierId,
+  );
+
+  const sourcing = decision
+    ? {
+        selectedSupplier: {
+          id: decision.selectedSupplierId,
+          name: winner?.supplierName ?? null,
+        },
+        selectedSupplierProductId: decision.selectedSupplierProductId,
+        totalScore: decision.totalScore,
+        candidatesEvaluated: decision.candidatesEvaluated,
+        rationale: decision.rationale,
+        decidedAt: decision.createdAt,
+      }
+    : null;
+
+  return { sourcing, supplierCandidates };
+}
+
 export interface RequisitionChatResult {
   requisitionId: string;
   status: "NEEDS_CLARIFICATION" | "PROCESSING" | "REQUIREMENTS_EXTRACTED";
@@ -359,14 +450,20 @@ export async function loadRequisitionForProcessing(params: {
 export async function getRequisition(params: { organizationId: string; requisitionId: string }) {
   const requisition = await prisma.requisition.findFirst({
     where: { id: params.requisitionId, organizationId: params.organizationId },
-    select: requisitionSelect,
+    select: requisitionDetailSelect,
   });
 
   if (!requisition) {
     throw AppError.notFound("Requisition not found");
   }
 
-  return { ...requisition, draftRequirements: parseDraft(requisition.draftRequirements) };
+  const { sourcingDecision: _decision, supplierCandidates: _candidates, ...rest } = requisition;
+
+  return {
+    ...rest,
+    draftRequirements: parseDraft(requisition.draftRequirements),
+    ...toSourcingView(requisition),
+  };
 }
 
 export async function listRequisitions(params: {
