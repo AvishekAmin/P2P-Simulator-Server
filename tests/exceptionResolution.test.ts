@@ -4,7 +4,13 @@ process.env.NODE_ENV ??= "test";
 process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/db";
 
 const db = {
-  exception: { findFirst: vi.fn(), update: vi.fn(), count: vi.fn() },
+  exception: {
+    findFirst: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    count: vi.fn(),
+  },
   invoice: { updateMany: vi.fn() },
   payment: { updateMany: vi.fn() },
   auditLog: { create: vi.fn() },
@@ -64,6 +70,10 @@ function resolve(decision: "APPROVE" | "REJECT" = "APPROVE") {
 beforeEach(() => {
   vi.clearAllMocks();
   db.exception.findFirst.mockResolvedValue(buildException());
+  db.exception.findUniqueOrThrow.mockImplementation(() => {
+    const lastUpdate = db.exception.updateMany.mock.calls.at(-1)?.[0]?.data;
+    return Promise.resolve(buildException(lastUpdate || { status: "RESOLVED" }));
+  });
   db.exception.update.mockImplementation((args: { data: { status: string } }) =>
     Promise.resolve(buildException({ status: args.data.status })),
   );
@@ -145,7 +155,7 @@ describe("resolveExceptionById — guards", () => {
   it("records the decision, reason and actor", async () => {
     await resolve("APPROVE");
 
-    expect(db.exception.update.mock.calls[0]?.[0]).toMatchObject({
+    expect(db.exception.updateMany.mock.calls[0]?.[0]).toMatchObject({
       data: {
         status: "RESOLVED",
         resolution: "APPROVE",
@@ -159,7 +169,7 @@ describe("resolveExceptionById — guards", () => {
     db.exception.findFirst.mockResolvedValue(buildException({ status }));
 
     await expect(resolve("APPROVE")).rejects.toThrow(`Exception is already ${status}`);
-    expect(db.exception.update).not.toHaveBeenCalled();
+    expect(db.exception.updateMany).not.toHaveBeenCalled();
     expect(db.invoice.updateMany).not.toHaveBeenCalled();
   });
 
