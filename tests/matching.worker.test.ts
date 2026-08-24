@@ -389,7 +389,7 @@ describe("processMatchingJob — isolation and failures", () => {
     await processMatchingJob(buildJob());
 
     expect(firstArg(db.invoice.findMany)).toMatchObject({
-      where: { organizationId: ORG, id: { not: INVOICE }, invoiceNumber: "INV-2026-0042" },
+      where: { organizationId: ORG, id: { not: INVOICE }, normalizedInvoiceNumber: "inv20260042" },
     });
   });
 

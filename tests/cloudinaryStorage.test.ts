@@ -243,27 +243,29 @@ describe("CloudinaryStorage", () => {
       const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(fixedNowMs);
       const expectedExpiresAt = Math.floor(fixedNowMs / 1000) + 300;
 
-      const result = await storage.download("p2p/invoices/inv-001/receipt", "application/pdf");
+      try {
+        const result = await storage.download("p2p/invoices/inv-001/receipt", "application/pdf");
 
-      expect(result.equals(body)).toBe(true);
-      expect(fetchMock).toHaveBeenCalledWith("https://api.cloudinary.com/private-download");
+        expect(result.equals(body)).toBe(true);
+        expect(fetchMock).toHaveBeenCalledWith("https://api.cloudinary.com/private-download");
 
-      // Not the delivery URL: Cloudinary accounts block PDF *delivery* by
-      // default and answer 401 no matter how well the URL is signed, so the
-      // Admin API download link is the only way to read a PDF invoice back.
-      expect(mockUrl).not.toHaveBeenCalled();
-      expect(mockPrivateDownloadUrl).toHaveBeenCalledWith(
-        "p2p/invoices/inv-001/receipt",
-        "pdf",
-        expect.objectContaining({
-          type: "authenticated",
-          resource_type: "image",
-          expires_at: expectedExpiresAt,
-        }),
-      );
-
-      dateNowSpy.mockRestore();
-      vi.unstubAllGlobals();
+        // Not the delivery URL: Cloudinary accounts block PDF *delivery* by
+        // default and answer 401 no matter how well the URL is signed, so the
+        // Admin API download link is the only way to read a PDF invoice back.
+        expect(mockUrl).not.toHaveBeenCalled();
+        expect(mockPrivateDownloadUrl).toHaveBeenCalledWith(
+          "p2p/invoices/inv-001/receipt",
+          "pdf",
+          expect.objectContaining({
+            type: "authenticated",
+            resource_type: "image",
+            expires_at: expectedExpiresAt,
+          }),
+        );
+      } finally {
+        dateNowSpy.mockRestore();
+        vi.unstubAllGlobals();
+      }
     });
 
 

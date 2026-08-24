@@ -123,8 +123,9 @@ export async function loadMatchingContext(params: {
  * and must stay in sync with it; exported so writers (e.g. invoice.service.ts)
  * can produce the same value when persisting the field.
  */
-export function normalizeInvoiceNumber(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+export function normalizeInvoiceNumber(value: string): string | null {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return normalized === "" ? null : normalized;
 }
 
 /**
@@ -147,6 +148,10 @@ export function loadPriorInvoices(params: {
   }
 
   const normalized = normalizeInvoiceNumber(params.invoiceNumber);
+
+  if (normalized === null) {
+    return Promise.resolve([]);
+  }
 
   return prisma.invoice.findMany({
     where: {

@@ -34,7 +34,17 @@ export interface MatchingResult {
  * so BullMQ never retries a decision that cannot change.
  */
 export async function processMatchingJob(job: Job): Promise<MatchingResult> {
-  const { invoiceId, organizationId } = matchingJobSchema.parse(job.data);
+  let invoiceId: string;
+  let organizationId: string;
+  try {
+    ({ invoiceId, organizationId } = matchingJobSchema.parse(job.data));
+  } catch (parseError) {
+    const reason =
+      parseError instanceof Error ? parseError.message : "Invalid matching job payload";
+    console.error(`Matching job ${job.id}: invalid payload — ${reason}`, job.data);
+    // Return a skipped result; BullMQ will not retry because we are not throwing.
+    return { invoiceId: String(job.id ?? "unknown"), status: null, skippedReason: reason };
+  }
 
   try {
     const context = await loadMatchingContext({ organizationId, invoiceId });
