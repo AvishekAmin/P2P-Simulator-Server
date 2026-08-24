@@ -61,8 +61,8 @@ export class AppError extends Error {
     return new AppError("FORBIDDEN", message);
   }
 
-  static notFound(message = "Resource not found"): AppError {
-    return new AppError("NOT_FOUND", message);
+  static notFound(message = "Resource not found", details?: unknown): AppError {
+    return new AppError("NOT_FOUND", message, details);
   }
 
   static conflict(message: string, details?: unknown): AppError {
