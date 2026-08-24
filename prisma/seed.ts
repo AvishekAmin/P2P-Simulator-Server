@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { prisma } from "../src/config/prisma.js";
 
 // Demo catalog for the P2P MVP. Deterministic ids + upsert so this is safe to
@@ -252,10 +253,308 @@ async function main(): Promise<void> {
     });
   }
 
+  // --- Seed Demo Requisitions -------------------------------------------
+  // Demo Scenario 1: [SUCCESS] Happy path -> TechSource selected
+  const req1 = await prisma.requisition.upsert({
+    where: { id: "req-demo-001" },
+    update: {},
+    create: {
+      id: "req-demo-001",
+      organizationId: organization.id,
+      rawInput: "100 wireless keyboards under ₹2000 each within 7 days",
+      status: "SUPPLIER_SELECTED",
+      turnCount: 1,
+      createdBy: "dev-user",
+    },
+  });
+
+  await prisma.requirement.upsert({
+    where: { requisitionId: req1.id },
+    update: {},
+    create: {
+      requisitionId: req1.id,
+      productName: "Wireless Keyboard",
+      category: "PERIPHERALS",
+      quantity: 100,
+      maxUnitPricePaise: 200_000,
+      deliveryDeadlineDays: 7,
+      currency: "INR",
+      confidence: 0.98,
+      rawExtraction: { item: "Wireless Keyboard", quantity: 100, maxPrice: 2000, days: 7 },
+    },
+  });
+
+  await prisma.supplierCandidate.upsert({
+    where: { requisitionId_supplierId: { requisitionId: req1.id, supplierId: SUPPLIERS.techsource.id } },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req1.id,
+      supplierId: SUPPLIERS.techsource.id,
+      supplierProductId: "sp-keyboard-techsource",
+      eligible: true,
+      priceScore: 100,
+      deliveryScore: 100,
+      reliabilityScore: 95,
+      ratingScore: 92,
+      stockScore: 100,
+      totalScore: 97.8,
+      rank: 1,
+      unitPricePaise: 182_000,
+      deliveryDays: 5,
+      availableStock: 500,
+    },
+  });
+
+  await prisma.supplierCandidate.upsert({
+    where: { requisitionId_supplierId: { requisitionId: req1.id, supplierId: SUPPLIERS.globalOffice.id } },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req1.id,
+      supplierId: SUPPLIERS.globalOffice.id,
+      supplierProductId: "sp-keyboard-global",
+      eligible: false,
+      ineligibleReason: "Delivery in 8 days exceeds the 7-day deadline",
+      priceScore: 0,
+      deliveryScore: 0,
+      reliabilityScore: 0,
+      ratingScore: 0,
+      stockScore: 0,
+      totalScore: 0,
+      rank: 2,
+      unitPricePaise: 195_000,
+      deliveryDays: 8,
+      availableStock: 300,
+    },
+  });
+
+  await prisma.supplierCandidate.upsert({
+    where: { requisitionId_supplierId: { requisitionId: req1.id, supplierId: SUPPLIERS.budgetBulk.id } },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req1.id,
+      supplierId: SUPPLIERS.budgetBulk.id,
+      supplierProductId: "sp-keyboard-budget",
+      eligible: false,
+      ineligibleReason: "Stock 40 is below the required 100",
+      priceScore: 0,
+      deliveryScore: 0,
+      reliabilityScore: 0,
+      ratingScore: 0,
+      stockScore: 0,
+      totalScore: 0,
+      rank: 3,
+      unitPricePaise: 170_000,
+      deliveryDays: 4,
+      availableStock: 40,
+    },
+  });
+
+  await prisma.sourcingDecision.upsert({
+    where: { requisitionId: req1.id },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req1.id,
+      selectedSupplierId: SUPPLIERS.techsource.id,
+      selectedSupplierProductId: "sp-keyboard-techsource",
+      totalScore: 97.8,
+      candidatesEvaluated: 3,
+      rationale: "TechSource Distributors offered the lowest eligible unit price at ₹1,820 with 5-day delivery (within the 7-day deadline) and 500 units in stock.",
+    },
+  });
+
+  // Demo Scenario 2: [QTY MISMATCH] -> PO Created
+  const req2 = await prisma.requisition.upsert({
+    where: { id: "req-demo-002" },
+    update: {},
+    create: {
+      id: "req-demo-002",
+      organizationId: organization.id,
+      rawInput: "100 wireless mouse under ₹500 within 5 days",
+      status: "PO_CREATED",
+      turnCount: 1,
+      createdBy: "dev-user",
+    },
+  });
+
+  await prisma.requirement.upsert({
+    where: { requisitionId: req2.id },
+    update: {},
+    create: {
+      requisitionId: req2.id,
+      productName: "Wireless Mouse",
+      category: "PERIPHERALS",
+      quantity: 100,
+      maxUnitPricePaise: 50_000,
+      deliveryDeadlineDays: 5,
+      currency: "INR",
+      confidence: 0.96,
+      rawExtraction: { item: "Wireless Mouse", quantity: 100, maxPrice: 500, days: 5 },
+    },
+  });
+
+  await prisma.sourcingDecision.upsert({
+    where: { requisitionId: req2.id },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req2.id,
+      selectedSupplierId: SUPPLIERS.techsource.id,
+      selectedSupplierProductId: "sp-mouse-techsource",
+      totalScore: 96.5,
+      candidatesEvaluated: 2,
+      rationale: "TechSource Distributors selected with ₹450 unit price, 4 days delivery, and 120 stock.",
+    },
+  });
+
+  await prisma.purchaseOrder.upsert({
+    where: { requisitionId: req2.id },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req2.id,
+      poNumber: "PO-20260824-001",
+      supplierId: SUPPLIERS.techsource.id,
+      status: "APPROVED",
+      subtotalPaise: 45_000 * 100,
+      taxPaise: Math.round(45_000 * 100 * 0.18),
+      totalPaise: 45_000 * 100 + Math.round(45_000 * 100 * 0.18),
+      taxRateBps: 1800,
+    },
+  });
+
+  // Demo Scenario 3: [PRICE MISMATCH] -> Requirements Extracted
+  const req3 = await prisma.requisition.upsert({
+    where: { id: "req-demo-003" },
+    update: {},
+    create: {
+      id: "req-demo-003",
+      organizationId: organization.id,
+      rawInput: "10 24-inch monitors under ₹9000 within 7 days",
+      status: "REQUIREMENTS_EXTRACTED",
+      turnCount: 1,
+      createdBy: "dev-user",
+    },
+  });
+
+  await prisma.requirement.upsert({
+    where: { requisitionId: req3.id },
+    update: {},
+    create: {
+      requisitionId: req3.id,
+      productName: '24" Monitor',
+      category: "COMPUTING",
+      quantity: 10,
+      maxUnitPricePaise: 900_000,
+      deliveryDeadlineDays: 7,
+      currency: "INR",
+      confidence: 0.95,
+      rawExtraction: { item: '24" Monitor', quantity: 10, maxPrice: 9000, days: 7 },
+    },
+  });
+
+  // Demo Scenario 4: [NO SUPPLIER FOUND] -> Failed
+  const req4 = await prisma.requisition.upsert({
+    where: { id: "req-demo-004" },
+    update: {},
+    create: {
+      id: "req-demo-004",
+      organizationId: organization.id,
+      rawInput: "5 HD Projectors under ₹30000 within 5 days",
+      status: "FAILED",
+      failureReason: "No eligible supplier found matching budget and delivery deadline.",
+      turnCount: 1,
+      createdBy: "dev-user",
+    },
+  });
+
+  await prisma.supplierCandidate.upsert({
+    where: { requisitionId_supplierId: { requisitionId: req4.id, supplierId: SUPPLIERS.techsource.id } },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req4.id,
+      supplierId: SUPPLIERS.techsource.id,
+      supplierProductId: "sp-projector-techsource",
+      eligible: false,
+      ineligibleReason: "Unit price ₹45,000 exceeds ₹30,000 budget and delivery in 10 days exceeds 5 days deadline",
+      priceScore: 0,
+      deliveryScore: 0,
+      reliabilityScore: 0,
+      ratingScore: 0,
+      stockScore: 0,
+      totalScore: 0,
+      rank: 1,
+      unitPricePaise: 4_500_000,
+      deliveryDays: 10,
+      availableStock: 3,
+    },
+  });
+
+  await prisma.supplierCandidate.upsert({
+    where: { requisitionId_supplierId: { requisitionId: req4.id, supplierId: SUPPLIERS.globalOffice.id } },
+    update: {},
+    create: {
+      organizationId: organization.id,
+      requisitionId: req4.id,
+      supplierId: SUPPLIERS.globalOffice.id,
+      supplierProductId: "sp-projector-global",
+      eligible: false,
+      ineligibleReason: "Product is out of stock (0 available) and unit price ₹39,000 exceeds ₹30,000 budget",
+      priceScore: 0,
+      deliveryScore: 0,
+      reliabilityScore: 0,
+      ratingScore: 0,
+      stockScore: 0,
+      totalScore: 0,
+      rank: 2,
+      unitPricePaise: 3_900_000,
+      deliveryDays: 12,
+      availableStock: 0,
+    },
+  });
+
+  // Demo Scenario 5: [NEEDS_CLARIFICATION]
+  const req5 = await prisma.requisition.upsert({
+    where: { id: "req-demo-005" },
+    update: {},
+    create: {
+      id: "req-demo-005",
+      organizationId: organization.id,
+      rawInput: "Need some laptops",
+      status: "NEEDS_CLARIFICATION",
+      missingFields: ["quantity", "maxUnitPricePaise", "deliveryDeadlineDays"],
+      clarificationMessage: "How many 14\" laptops do you need, what is your budget per unit, and when do you need them delivered?",
+      turnCount: 1,
+      createdBy: "dev-user",
+    },
+  });
+
+  await prisma.requisitionMessage.createMany({
+    data: [
+      {
+        organizationId: organization.id,
+        requisitionId: req5.id,
+        role: "USER",
+        content: "Need some laptops",
+      },
+      {
+        organizationId: organization.id,
+        requisitionId: req5.id,
+        role: "ASSISTANT",
+        content: "How many 14\" laptops do you need, what is your budget per unit, and when do you need them delivered?",
+      },
+    ],
+    skipDuplicates: true,
+  });
+
   console.log(
     `Seeded organization "${organization.name}" (${organization.id}) with ` +
       `${Object.keys(SUPPLIERS).length} suppliers, ${PRODUCTS.length} products, ` +
-      `${SUPPLIER_PRODUCTS.length} supplier-product offers.`,
+      `${SUPPLIER_PRODUCTS.length} supplier-product offers, and 5 demo requisitions.`,
   );
 }
 

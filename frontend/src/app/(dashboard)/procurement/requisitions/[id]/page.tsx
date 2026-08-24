@@ -22,6 +22,11 @@ import {
   Loader2,
   Lock,
   RefreshCw,
+  XCircle,
+  HelpCircle,
+  Award,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   PageHeader,
@@ -60,6 +65,7 @@ export default function RequisitionDetailPage() {
   } = useRequisitionPolling(id);
 
   const [messageInput, setMessageInput] = useState("");
+  const [showScoringModel, setShowScoringModel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll to bottom of message transcript when messages change
@@ -164,100 +170,172 @@ export default function RequisitionDetailPage() {
     ];
   }, [requisition]);
 
-  // Candidates table columns
-  const candidateColumns: Column<SourcingCandidateView>[] = [
-    {
-      header: "Rank",
-      accessorKey: "rank",
-      className: "w-16 font-semibold text-slate-700",
-      cell: (row) => (
-        <span
-          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-            row.rank === 1 && row.eligible
-              ? "bg-amber-100 text-amber-900 border border-amber-300"
-              : "bg-slate-100 text-slate-700"
-          }`}
-        >
-          #{row.rank}
-        </span>
-      ),
-    },
-    {
-      header: "Supplier Name",
-      accessorKey: "supplierName",
-      className: "font-medium text-foreground",
-      cell: (row) => (
-        <div>
-          <div className="flex items-center gap-1.5 font-semibold text-xs text-slate-800">
-            <Building2 className="h-3.5 w-3.5 text-muted shrink-0" />
-            <span>{row.supplierName}</span>
-          </div>
-          {!row.eligible && row.ineligibleReason && (
-            <p className="text-[11px] text-rose-600 font-normal mt-0.5">
-              {row.ineligibleReason}
-            </p>
-          )}
-        </div>
-      ),
-    },
-    {
-      header: "Status",
-      accessorKey: "eligible",
-      cell: (row) => (
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
-            row.eligible
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              : "bg-rose-50 text-rose-700 border border-rose-200"
-          }`}
-        >
-          {row.eligible ? "Eligible" : "Ineligible"}
-        </span>
-      ),
-    },
-    {
-      header: "Unit Price",
-      accessorKey: "unitPricePaise",
-      cell: (row) => (
-        <MoneyDisplay
-          amountPaise={row.unitPricePaise}
-          className="text-xs font-medium text-slate-800"
-        />
-      ),
-    },
-    {
-      header: "Delivery",
-      accessorKey: "deliveryDays",
-      className: "text-xs text-slate-600",
-      cell: (row) => `${row.deliveryDays} days`,
-    },
-    {
-      header: "Stock",
-      accessorKey: "availableStock",
-      className: "text-xs text-slate-600",
-      cell: (row) => `${row.availableStock} units`,
-    },
-    {
-      header: "Total Score",
-      accessorKey: "scores",
-      className: "text-right",
-      headerClassName: "text-right",
-      cell: (row) => (
-        <div className="text-right">
+  // Candidates table columns (Phase 3E)
+  const candidateColumns: Column<SourcingCandidateView>[] = useMemo(() => {
+    const winnerId = requisition?.sourcing?.selectedSupplier?.id;
+
+    return [
+      {
+        header: "Rank",
+        accessorKey: "rank",
+        className: "w-20 font-semibold text-slate-700",
+        cell: (row) => {
+          const isWinner = row.eligible && (row.supplierId === winnerId || row.rank === 1);
+          return (
+            <div className="flex items-center gap-1">
+              <span
+                className={`inline-flex items-center justify-center rounded-full text-xs font-bold px-2 py-0.5 ${
+                  isWinner
+                    ? "bg-amber-500 text-white shadow-2xs"
+                    : row.eligible
+                    ? "bg-slate-100 text-slate-800 border border-slate-200"
+                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                }`}
+              >
+                #{row.rank}
+              </span>
+              {isWinner && <Award className="h-4 w-4 text-amber-500 shrink-0" />}
+            </div>
+          );
+        },
+      },
+      {
+        header: "Supplier",
+        accessorKey: "supplierName",
+        className: "min-w-[200px] font-medium text-foreground",
+        cell: (row) => {
+          const isWinner = row.eligible && (row.supplierId === winnerId || row.rank === 1);
+          return (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 font-semibold text-xs text-slate-900">
+                <Building2 className="h-3.5 w-3.5 text-muted shrink-0" />
+                <span>{row.supplierName}</span>
+                {isWinner && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold uppercase tracking-wider text-amber-800 border border-amber-300">
+                    Selected
+                  </span>
+                )}
+              </div>
+              {!row.eligible && row.ineligibleReason && (
+                <div className="flex items-start gap-1 text-[11px] text-rose-700 bg-rose-50/70 p-1.5 rounded border border-rose-200/80">
+                  <XCircle className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{row.ineligibleReason}</span>
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        header: "Eligibility",
+        accessorKey: "eligible",
+        className: "w-24",
+        cell: (row) => (
           <span
-            className={`text-xs font-bold ${
-              row.eligible ? "text-primary" : "text-slate-400"
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
+              row.eligible
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : "bg-rose-50 text-rose-700 border border-rose-200"
             }`}
           >
-            {row.eligible ? `${row.scores?.total?.toFixed(1) || 0}` : "—"}
+            {row.eligible ? (
+              <>
+                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                Eligible
+              </>
+            ) : (
+              <>
+                <XCircle className="h-3 w-3 text-rose-600" />
+                Ineligible
+              </>
+            )}
           </span>
-          {row.eligible && (
-            <span className="text-[10px] text-muted block">/ 100</span>
-          )}
-        </div>
-      ),
-    },
-  ];
+        ),
+      },
+      {
+        header: "Unit Price",
+        accessorKey: "unitPricePaise",
+        className: "w-28",
+        cell: (row) => (
+          <MoneyDisplay
+            amountPaise={row.unitPricePaise}
+            className="text-xs font-semibold text-slate-800"
+          />
+        ),
+      },
+      {
+        header: "Delivery",
+        accessorKey: "deliveryDays",
+        className: "w-24 text-xs text-slate-600",
+        cell: (row) => `${row.deliveryDays} days`,
+      },
+      {
+        header: "Available Stock",
+        accessorKey: "availableStock",
+        className: "w-28 text-xs text-slate-600",
+        cell: (row) => `${row.availableStock.toLocaleString()} units`,
+      },
+      {
+        header: "Factor Score Breakdown",
+        accessorKey: "scores",
+        className: "min-w-[220px]",
+        cell: (row) => {
+          if (!row.eligible) {
+            return (
+              <span className="text-[11px] text-slate-400 italic">
+                Disqualified (Scores: 0)
+              </span>
+            );
+          }
+          const s = row.scores;
+          return (
+            <div className="grid grid-cols-5 gap-1 text-[10px] text-center font-mono">
+              <div className="rounded bg-slate-50 border border-slate-200 px-1 py-0.5" title="Price Score (30% weight)">
+                <span className="text-muted block text-[8px] uppercase">Price</span>
+                <span className="font-bold text-slate-700">{s?.price?.toFixed(0) || 0}</span>
+              </div>
+              <div className="rounded bg-slate-50 border border-slate-200 px-1 py-0.5" title="Delivery Score (25% weight)">
+                <span className="text-muted block text-[8px] uppercase">Deliv</span>
+                <span className="font-bold text-slate-700">{s?.delivery?.toFixed(0) || 0}</span>
+              </div>
+              <div className="rounded bg-slate-50 border border-slate-200 px-1 py-0.5" title="Reliability Score (20% weight)">
+                <span className="text-muted block text-[8px] uppercase">Rel</span>
+                <span className="font-bold text-slate-700">{s?.reliability?.toFixed(0) || 0}</span>
+              </div>
+              <div className="rounded bg-slate-50 border border-slate-200 px-1 py-0.5" title="Rating Score (15% weight)">
+                <span className="text-muted block text-[8px] uppercase">Rate</span>
+                <span className="font-bold text-slate-700">{s?.rating?.toFixed(0) || 0}</span>
+              </div>
+              <div className="rounded bg-slate-50 border border-slate-200 px-1 py-0.5" title="Stock Score (10% weight)">
+                <span className="text-muted block text-[8px] uppercase">Stk</span>
+                <span className="font-bold text-slate-700">{s?.stock?.toFixed(0) || 0}</span>
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        header: "Total Score",
+        accessorKey: "scores",
+        className: "w-24 text-right",
+        headerClassName: "text-right",
+        cell: (row) => (
+          <div className="text-right">
+            <span
+              className={`text-xs font-bold ${
+                row.eligible ? "text-primary text-sm" : "text-slate-400"
+              }`}
+            >
+              {row.eligible ? `${row.scores?.total?.toFixed(1) || 0}` : "—"}
+            </span>
+            {row.eligible && (
+              <span className="text-[10px] text-muted block">/ 100</span>
+            )}
+          </div>
+        ),
+      },
+    ];
+  }, [requisition?.sourcing?.selectedSupplier?.id]);
 
   // PO Item table columns
   const poItemColumns: Column<PurchaseOrderItem>[] = [
@@ -345,6 +423,7 @@ export default function RequisitionDetailPage() {
   const candidates = (requisition.supplierCandidates || []) as SourcingCandidateView[];
   const sourcing = requisition.sourcing;
   const purchaseOrder = requisition.purchaseOrder;
+  const isSourcingFailed = requisition.status === "FAILED" && !sourcing;
 
   return (
     <div className="space-y-6">
@@ -384,7 +463,7 @@ export default function RequisitionDetailPage() {
         </div>
       </div>
 
-      {/* Dynamic Processing & Asynchronous Status Banners (Phase 3D) */}
+      {/* Dynamic Processing & Asynchronous Status Banners */}
       {pollingState === "PROCESSING_EXTRACTION" && (
         <div className="rounded-lg border border-blue-200 bg-blue-50/90 p-4 text-blue-900 shadow-2xs">
           <div className="flex items-start gap-3">
@@ -482,14 +561,14 @@ export default function RequisitionDetailPage() {
 
       {/* Failure Alert Banner if FAILED */}
       {requisition.status === "FAILED" && requisition.failureReason && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50/90 p-4 text-rose-900">
+        <div className="rounded-lg border border-rose-200 bg-rose-50/90 p-4 text-rose-900 shadow-2xs">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <h4 className="text-xs font-bold uppercase tracking-wider text-rose-800">
                 Procurement Workflow Interrupted
               </h4>
-              <p className="text-xs leading-relaxed text-rose-700">
+              <p className="text-xs leading-relaxed text-rose-700 font-mono">
                 {requisition.failureReason}
               </p>
             </div>
@@ -639,13 +718,13 @@ export default function RequisitionDetailPage() {
             )}
           </div>
 
-          {/* Section: Sourcing Outcome & Candidate Ranking */}
-          {(sourcing || candidates.length > 0) && (
-            <div className="rounded-lg border border-border bg-white p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-border pb-3">
+          {/* Section: Supplier Discovery & Sourcing Decision (Phase 3E) */}
+          {(sourcing || candidates.length > 0 || isSourcingFailed) && (
+            <div className="rounded-lg border border-border bg-white p-5 shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   <Sparkles className="h-4 w-4 text-amber-500" />
-                  <span>Supplier Discovery &amp; Sourcing Decision</span>
+                  <span>Supplier Discovery &amp; Sourcing Outcome</span>
                 </div>
                 {sourcing && (
                   <span className="text-xs text-muted">
@@ -654,32 +733,47 @@ export default function RequisitionDetailPage() {
                 )}
               </div>
 
+              {/* 3E-A: Winning Sourcing Outcome Card */}
               {sourcing && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-2.5">
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wider text-amber-800 font-semibold block">
-                        Selected Supplier
-                      </span>
-                      <span className="text-sm font-bold text-slate-900">
-                        {sourcing.selectedSupplier?.name || "Awarded Candidate"}
-                      </span>
+                <div className="rounded-lg border border-amber-200 bg-linear-to-br from-amber-50/80 to-amber-100/30 p-4 space-y-3.5 shadow-2xs">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-amber-200/70 pb-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded">
+                          Selected by Autonomous Workflow
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5 pt-0.5">
+                        <Building2 className="h-4 w-4 text-amber-600" />
+                        <span>{sourcing.selectedSupplier?.name || "Awarded Supplier"}</span>
+                      </h3>
+                      {sourcing.decidedAt && (
+                        <p className="text-[11px] text-muted">
+                          Decision finalized on{" "}
+                          {new Date(sourcing.decidedAt).toLocaleString("en-IN")}
+                        </p>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-600">Composite Score:</span>
-                      <span className="inline-flex items-center rounded-md bg-amber-500 px-2 py-0.5 text-xs font-bold text-white shadow-2xs">
-                        {sourcing.totalScore?.toFixed(1)} / 100
-                      </span>
+                    <div className="flex items-center gap-2 bg-white/90 border border-amber-200/90 rounded-md px-3 py-2 shadow-2xs">
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-semibold text-muted block">
+                          Composite Score
+                        </span>
+                        <span className="text-base font-bold text-amber-600">
+                          {sourcing.totalScore?.toFixed(1)}
+                        </span>
+                        <span className="text-[10px] text-muted ml-0.5">/ 100</span>
+                      </div>
                     </div>
                   </div>
 
                   {sourcing.rationale && (
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-semibold text-amber-900 block">
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-bold text-amber-900 block uppercase tracking-wider">
                         AI Sourcing Rationale:
                       </span>
-                      <p className="text-xs text-slate-700 leading-relaxed italic bg-white/70 p-2.5 rounded border border-amber-200/50">
+                      <p className="text-xs text-slate-800 leading-relaxed italic bg-white/80 p-3 rounded border border-amber-200/70 shadow-2xs">
                         &quot;{sourcing.rationale}&quot;
                       </p>
                     </div>
@@ -687,18 +781,91 @@ export default function RequisitionDetailPage() {
                 </div>
               )}
 
-              {candidates.length > 0 && (
-                <div className="space-y-2 pt-1">
-                  <span className="text-xs font-semibold text-slate-700 block">
-                    Evaluated Supplier Catalog Offers
-                  </span>
-                  <DataTable
-                    columns={candidateColumns}
-                    data={candidates}
-                    keyExtractor={(row) => row.supplierId}
-                  />
+              {/* 3E-D: Failed Sourcing / No Supplier Found Card */}
+              {isSourcingFailed && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4 space-y-2 text-rose-900">
+                  <div className="flex items-start gap-2.5">
+                    <XCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-rose-800">
+                        No Eligible Supplier Found
+                      </h4>
+                      <p className="text-xs text-rose-700 leading-relaxed">
+                        {requisition.failureReason ||
+                          "None of the evaluated catalog suppliers satisfied all hard constraints (currency, price ceiling, minimum stock, or delivery deadline)."}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
+
+              {/* 3E-B: Evaluated Supplier Candidates Comparison Table */}
+              {candidates.length > 0 && (
+                <div className="space-y-2.5 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 block">
+                      Evaluated Supplier Catalog Offers ({candidates.length})
+                    </span>
+                    <span className="text-[11px] text-muted">
+                      Ranked deterministically by 5-factor scoring model
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <DataTable
+                      columns={candidateColumns}
+                      data={candidates}
+                      keyExtractor={(row) => row.supplierId}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 3E-C: Deterministic 5-Factor Scoring Model Explanation Accordion */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/60 overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowScoringModel((prev) => !prev)}
+                  className="w-full flex items-center justify-between p-3 text-left font-medium text-slate-700 hover:bg-slate-100/70 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="h-4 w-4 text-primary" />
+                    <span>How Supplier Sourcing &amp; Scoring Works (Backend Logic)</span>
+                  </div>
+                  {showScoringModel ? (
+                    <ChevronUp className="h-4 w-4 text-muted" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted" />
+                  )}
+                </button>
+
+                {showScoringModel && (
+                  <div className="p-3.5 pt-0 border-t border-slate-200/80 space-y-3 text-slate-600 leading-relaxed text-[11px]">
+                    <p>
+                      Supplier selection is computed <strong>deterministically</strong> on the backend according to the PR2 sourcing rules:
+                    </p>
+
+                    <div className="space-y-1.5 pl-2 border-l-2 border-primary/40">
+                      <div>
+                        <strong>1. Hard Eligibility Gating:</strong> Suppliers must be active, quote in the required currency, meet minimum order requirements, hold sufficient stock, not exceed max unit price, and meet delivery deadlines. Disqualified offers score 0.
+                      </div>
+                      <div>
+                        <strong>2. 5-Factor Weighted Score (Eligible Set Only):</strong>
+                        <ul className="list-disc list-inside mt-1 space-y-0.5 text-slate-700">
+                          <li><strong>Price (30% weight):</strong> Min-max normalized against competing offers (cheapest = 100).</li>
+                          <li><strong>Delivery Speed (25% weight):</strong> Min-max normalized against competing offers (fastest = 100).</li>
+                          <li><strong>Supplier Reliability (20% weight):</strong> Normalized historical fulfillment and on-time score (0–100).</li>
+                          <li><strong>Catalog Rating (15% weight):</strong> 5-star quality rating scaled to 100 points.</li>
+                          <li><strong>Available Stock (10% weight):</strong> Stock depth normalized across eligible offers.</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <strong>3. AI Rationale:</strong> Once the winning supplier is selected deterministically by composite score, an AI provider writes an explanatory narrative for transparency.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
