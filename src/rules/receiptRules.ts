@@ -112,6 +112,12 @@ function buildExplicitLines(
 }
 
 function toLine(ordered: OrderedLine, received: number, damaged: number): ReceiptLine {
+  // Zod already enforces this on the API payload, but these rules are the last
+  // deterministic gate before the database: a caller reaching them by another
+  // route must not be able to book fractional or negative goods.
+  assertWholeUnits(ordered, "receivedQuantity", received);
+  assertWholeUnits(ordered, "damagedQuantity", damaged);
+
   if (damaged > received) {
     throw AppError.validation("Damaged quantity cannot exceed the received quantity", {
       purchaseOrderItemId: ordered.id,
@@ -135,6 +141,19 @@ function toLine(ordered: OrderedLine, received: number, damaged: number): Receip
     damagedQuantity: damaged,
     acceptedQuantity: received - damaged,
   };
+}
+
+function assertWholeUnits(
+  ordered: OrderedLine,
+  field: "receivedQuantity" | "damagedQuantity",
+  value: number,
+): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw AppError.validation(`${field} must be a whole, non-negative number of units`, {
+      purchaseOrderItemId: ordered.id,
+      [field]: value,
+    });
+  }
 }
 
 /**
