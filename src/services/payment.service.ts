@@ -8,10 +8,8 @@ import {
 } from "../generated/prisma/enums.js";
 import { PAYMENT_PROVIDER_NAME } from "../payments/index.js";
 import { AppError } from "../utils/AppError.js";
-import { recordAudit } from "./audit.service.js";
+import { INVOICE_ENTITY, recordAudit } from "./audit.service.js";
 import { recordException } from "./exception.service.js";
-
-const INVOICE_ENTITY = "Invoice";
 
 // ---------------------------------------------------------------------------
 // Load

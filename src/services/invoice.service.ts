@@ -11,11 +11,9 @@ import { getStorageProvider } from "../storage/index.js";
 import { AppError } from "../utils/AppError.js";
 import type { InvoiceExtraction } from "../zod/invoice.schema.js";
 import { toInvoiceDate, toPaise } from "../zod/invoice.schema.js";
-import { recordAudit } from "./audit.service.js";
+import { INVOICE_ENTITY, recordAudit } from "./audit.service.js";
 import { recordException } from "./exception.service.js";
 import { normalizeInvoiceNumber } from "./matching.service.js";
-
-const INVOICE_ENTITY = "Invoice";
 
 /**
  * Purchase-order statuses an invoice may be raised against. A DRAFT,
@@ -428,7 +426,7 @@ export async function applyInvoiceExtractionFailure(params: {
       action: "WORKFLOW_FAILED",
       entityType: INVOICE_ENTITY,
       entityId: invoiceId,
-      metadata: { stage: "INVOICE_EXTRACTION", reason },
+      metadata: { stage: "invoice-extraction", reason },
     });
 
     return tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, select: invoiceViewSelect });

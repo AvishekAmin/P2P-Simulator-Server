@@ -199,10 +199,18 @@ technical failure (DB/Redis blip, provider timeout) is rethrown for BullMQ to re
 ## Audit trail
 
 Every state change in this stage writes an `AuditLog` row: `MATCH_STARTED`, `MATCH_COMPLETED` (with
-the check counts), `EXCEPTION_CREATED` (implicit in `recordException`, not a separate audit call —
-the exception row itself is the record), `EXCEPTION_RESOLVED`, `PAYMENT_APPROVED` (once when matching
+the check counts), `EXCEPTION_CREATED`, `EXCEPTION_RESOLVED`, `PAYMENT_APPROVED` (once when matching
 clears an invoice, again if an exception override releases one), `PAYMENT_COMPLETED`, and
 `WORKFLOW_FAILED` on either worker's terminal failure.
+
+`EXCEPTION_CREATED` is written once, centrally, inside `recordException()` itself — not by each call
+site — so every path that can open an exception (matching, sourcing, PO approval) gets an audit row
+for free and none can skip it. `recordException()` pre-reads the row before its upsert to tell
+create from update and only audits the create; a retried worker racing a concurrent duplicate
+delivery can lose that pre-read and log `EXCEPTION_CREATED` twice for what upserts to a single
+`Exception` row (the row itself stays unique — the unique constraint on
+`[organizationId, type, entityId]` guards that, not the audit read) — an accepted over-observation
+rather than a correctness bug.
 
 ## Not built
 

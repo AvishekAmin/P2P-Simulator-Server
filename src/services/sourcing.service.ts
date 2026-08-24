@@ -13,10 +13,9 @@ import { buildRationale, type RankedCandidate } from "../rules/supplierRanking.j
 import { AppError } from "../utils/AppError.js";
 import { sourcingRationaleSchema } from "../zod/sourcing.schema.js";
 import { recordAIProcessing } from "./aiLog.service.js";
-import { recordAudit } from "./audit.service.js";
+import { REQUISITION_ENTITY as ENTITY_TYPE, recordAudit } from "./audit.service.js";
 import { recordException } from "./exception.service.js";
 
-const ENTITY_TYPE = "Requisition";
 const RATIONALE_JOB_TYPE = "generate-sourcing-rationale";
 
 const requisitionSelect = {
@@ -237,15 +236,6 @@ export async function applySourcingFailure(params: {
           : "Supplier discovery failed",
       description: reason,
       ...(metadata !== undefined ? { metadata } : {}),
-    });
-
-    await recordAudit(tx, {
-      organizationId,
-      actorType: "SYSTEM",
-      action: "EXCEPTION_CREATED",
-      entityType: ENTITY_TYPE,
-      entityId: requisitionId,
-      metadata: { type: exceptionType, reason },
     });
 
     await recordAudit(tx, {

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { attachTenant, requireOrganization } from "../middleware/auth.js";
 import { apiRateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { auditLogRouter } from "./auditLog.routes.js";
 import { exceptionRouter } from "./exception.routes.js";
 import { healthRouter } from "./health.routes.js";
 import { invoiceRouter } from "./invoice.routes.js";
@@ -25,6 +26,7 @@ apiV1Router.use("/shipments", shipmentRouter);
 apiV1Router.use("/receipts", receiptRouter);
 apiV1Router.use("/invoices", invoiceRouter);
 apiV1Router.use("/exceptions", exceptionRouter);
+apiV1Router.use("/audit-logs", auditLogRouter);
 
 // Mount point for the remaining resources: suppliers, matching, payments.
 rootRouter.use("/api/v1", apiV1Router);

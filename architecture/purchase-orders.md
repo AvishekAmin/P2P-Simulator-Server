@@ -106,7 +106,8 @@ Every BullMQ job can run more than once, and a client can double-click Approve.
 Three write paths, each a single `prisma.$transaction`:
 
 - **Creation** — requisition claim + PO + items (nested create) + `PO_CREATED` audit + approval
-  exception + `EXCEPTION_CREATED` audit.
+  exception (`recordException` writes its own `EXCEPTION_CREATED` audit — see
+  `architecture/matching-and-payment.md`'s audit trail section).
 - **Approval** — guarded PO transition + shipment upsert + `PO_APPROVED` and `SHIPMENT_CREATED`
   audits + the approval exception resolved.
 - **Rejection** — guarded PO transition + requisition `FAILED` + `PO_REJECTED` audit + the approval

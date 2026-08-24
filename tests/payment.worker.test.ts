@@ -7,7 +7,7 @@ process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/db";
 const db = {
   invoice: { findFirst: vi.fn(), updateMany: vi.fn() },
   payment: { create: vi.fn(), updateMany: vi.fn() },
-  exception: { upsert: vi.fn(), count: vi.fn() },
+  exception: { upsert: vi.fn(), count: vi.fn(), findUnique: vi.fn() },
   auditLog: { create: vi.fn() },
 };
 
@@ -104,6 +104,7 @@ beforeEach(() => {
   db.payment.create.mockResolvedValue({ id: "pay-1" });
   db.payment.updateMany.mockResolvedValue({ count: 1 });
   db.exception.upsert.mockResolvedValue({ id: "exc-1" });
+  db.exception.findUnique.mockResolvedValue(null);
   db.exception.count.mockResolvedValue(0);
   db.auditLog.create.mockResolvedValue({});
   charge.mockResolvedValue({ providerReference: "SIM-ABC123" });

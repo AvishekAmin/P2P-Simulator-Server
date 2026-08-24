@@ -8,10 +8,10 @@ import {
   type Severity,
 } from "../generated/prisma/enums.js";
 import { AppError } from "../utils/AppError.js";
-import { recordAudit } from "./audit.service.js";
+import { EXCEPTION_ENTITY, INVOICE_ENTITY, recordAudit } from "./audit.service.js";
 
 /** Prisma client or an interactive-transaction client — exceptions must be able to join a transaction. */
-type PrismaLike = Pick<Prisma.TransactionClient, "exception">;
+type PrismaLike = Pick<Prisma.TransactionClient, "exception" | "auditLog">;
 
 export interface ExceptionInput {
   organizationId: string;
@@ -31,6 +31,14 @@ export interface ExceptionInput {
  * retried job cannot open the same exception twice. `status` is deliberately
  * left untouched on update: a re-drive must never reopen an exception a human
  * has already resolved.
+ *
+ * Writes the EXCEPTION_CREATED audit itself, once, right here — rather than at
+ * every call site — so no caller can raise an exception without an audit trail
+ * (CLAUDE.md: "important state transitions must be audited"). The pre-read
+ * that decides create-vs-update can lose a race against a concurrent duplicate
+ * delivery and log EXCEPTION_CREATED twice; that is an acceptable
+ * over-observation — the Exception row itself stays single because the upsert
+ * is still guarded by the unique constraint.
  */
 export async function recordException(
   db: PrismaLike,
@@ -43,7 +51,18 @@ export async function recordException(
     ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
   };
 
-  return db.exception.upsert({
+  const existing = await db.exception.findUnique({
+    where: {
+      organizationId_type_entityId: {
+        organizationId: input.organizationId,
+        type: input.type,
+        entityId: input.entityId,
+      },
+    },
+    select: { id: true },
+  });
+
+  const exception = await db.exception.upsert({
     where: {
       organizationId_type_entityId: {
         organizationId: input.organizationId,
@@ -61,6 +80,24 @@ export async function recordException(
     update: payload,
     select: { id: true },
   });
+
+  if (!existing) {
+    await recordAudit(db, {
+      organizationId: input.organizationId,
+      actorType: "SYSTEM",
+      action: "EXCEPTION_CREATED",
+      entityType: EXCEPTION_ENTITY,
+      entityId: exception.id,
+      metadata: {
+        type: input.type,
+        severity: input.severity,
+        entityType: input.entityType,
+        entityId: input.entityId,
+      },
+    });
+  }
+
+  return exception;
 }
 
 export interface ResolveExceptionInput {
@@ -161,7 +198,10 @@ export async function listExceptions(params: {
       ...(entityId ? { entityId } : {}),
     },
     select: exceptionViewSelect,
-    orderBy: { createdAt: "desc" },
+    // createdAt alone is not unique — matching can open several exceptions
+    // against one invoice inside a single transaction — so id breaks the tie
+    // deterministically and a page boundary can never skip or repeat a row.
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     // One extra row tells us whether another page exists without a second query.
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -209,8 +249,6 @@ export interface ResolveExceptionResult {
   releasedForPayment: boolean;
   invoiceId: string | null;
 }
-
-const INVOICE_ENTITY = "Invoice";
 
 /**
  * Applies a human decision to one exception.
@@ -293,7 +331,7 @@ export async function resolveExceptionById(
       actorType: "USER",
       actorId,
       action: "EXCEPTION_RESOLVED",
-      entityType: "Exception",
+      entityType: EXCEPTION_ENTITY,
       entityId: exceptionId,
       metadata: {
         decision,

@@ -15,10 +15,8 @@ import {
   type ThreeWayMatchResult,
 } from "../rules/threeWayMatch.js";
 import { AppError } from "../utils/AppError.js";
-import { recordAudit } from "./audit.service.js";
+import { INVOICE_ENTITY, recordAudit } from "./audit.service.js";
 import { recordException } from "./exception.service.js";
-
-const INVOICE_ENTITY = "Invoice";
 
 // ---------------------------------------------------------------------------
 // Load
