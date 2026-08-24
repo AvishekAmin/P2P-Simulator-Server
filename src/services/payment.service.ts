@@ -205,7 +205,6 @@ export async function applyPaymentCompletion(params: {
       );
     }
 
-
     await recordAudit(tx, {
       organizationId,
       actorType: "SYSTEM",
