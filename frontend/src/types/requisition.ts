@@ -12,8 +12,8 @@ export interface RequisitionMessage {
 }
 
 export interface Requirement {
-  id: string;
-  requisitionId: string;
+  id?: string;
+  requisitionId?: string;
   productName: string;
   category?: string | null;
   quantity: number;
@@ -23,10 +23,53 @@ export interface Requirement {
   specifications?: Record<string, unknown> | null;
   currency: string;
   confidence?: number | null;
-  missingFields: string[];
-  rawExtraction: Record<string, unknown>;
-  createdAt: string;
+  missingFields?: string[];
+  rawExtraction?: Record<string, unknown>;
+  createdAt?: string;
   updatedAt?: string;
+}
+
+export interface DraftRequirements {
+  productName: string | null;
+  quantity: number | null;
+  maxUnitPricePaise: number | null;
+  currency: string | null;
+  deliveryDays: number | null;
+  location: string | null;
+  specifications: Record<string, unknown>;
+}
+
+export interface SourcingCandidateScores {
+  price: number;
+  delivery: number;
+  reliability: number;
+  rating: number;
+  stock: number;
+  total: number;
+}
+
+export interface SourcingCandidateView {
+  supplierId: string;
+  supplierName: string;
+  rank: number;
+  eligible: boolean;
+  ineligibleReason: string | null;
+  unitPricePaise: number;
+  deliveryDays: number;
+  availableStock: number;
+  scores: SourcingCandidateScores;
+}
+
+export interface SourcingView {
+  selectedSupplier: {
+    id: string;
+    name: string | null;
+  };
+  selectedSupplierProductId: string;
+  totalScore: number;
+  candidatesEvaluated: number;
+  rationale: string | null;
+  decidedAt: string;
 }
 
 export interface SupplierCandidate {
@@ -73,7 +116,7 @@ export interface Requisition {
   status: RequisitionStatus;
   failureReason?: string | null;
   createdBy?: string | null;
-  draftRequirements?: Record<string, unknown> | null;
+  draftRequirements?: DraftRequirements | Record<string, unknown> | null;
   clarificationMessage?: string | null;
   missingFields?: string[];
   conflicts?: string[];
@@ -82,7 +125,51 @@ export interface Requisition {
   updatedAt?: string;
   requirement?: Requirement | null;
   messages?: RequisitionMessage[];
-  supplierCandidates?: SupplierCandidate[];
+  sourcing?: SourcingView | null;
+  supplierCandidates?: SourcingCandidateView[] | SupplierCandidate[];
   sourcingDecision?: SourcingDecision | null;
   purchaseOrder?: PurchaseOrder | null;
 }
+
+export interface RequisitionListItem {
+  id: string;
+  rawInput: string;
+  status: RequisitionStatus;
+  clarificationMessage: string | null;
+  missingFields: string[];
+  conflicts: string[];
+  turnCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RequisitionListResponse {
+  items: RequisitionListItem[];
+  nextCursor: string | null;
+}
+
+export interface ListRequisitionsParams {
+  status?: RequisitionStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface RequisitionChatResult {
+  requisitionId: string;
+  status: "NEEDS_CLARIFICATION" | "PROCESSING" | "REQUIREMENTS_EXTRACTED";
+  message: string;
+  missingFields?: string[];
+  conflicts?: string[];
+  requirements?: Requirement | null;
+}
+
+/** Frontend-only state machine for tracking asynchronous processing & polling lifecycles */
+export type RequisitionPollingState =
+  | "IDLE"
+  | "PROCESSING_EXTRACTION"
+  | "SOURCING"
+  | "COMPLETED"
+  | "NEEDS_CLARIFICATION"
+  | "FAILED"
+  | "TIMEOUT"
+  | "ERROR";
