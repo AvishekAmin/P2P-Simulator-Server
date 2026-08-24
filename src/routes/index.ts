@@ -4,7 +4,9 @@ import { apiRateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { healthRouter } from "./health.routes.js";
 import { purchaseOrderRouter } from "./purchaseOrder.routes.js";
+import { receiptRouter } from "./receipt.routes.js";
 import { requisitionRouter } from "./requisition.routes.js";
+import { shipmentRouter } from "./shipment.routes.js";
 
 export const rootRouter: Router = Router();
 
@@ -17,6 +19,8 @@ apiV1Router.use(asyncHandler(requireOrganization));
 
 apiV1Router.use("/requisitions", requisitionRouter);
 apiV1Router.use("/purchase-orders", purchaseOrderRouter);
+apiV1Router.use("/shipments", shipmentRouter);
+apiV1Router.use("/receipts", receiptRouter);
 
 // Mount point for the remaining resources: suppliers, invoices, matching,
 // payments, exceptions.

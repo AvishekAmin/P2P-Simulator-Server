@@ -1,0 +1,325 @@
+import { prisma } from "../config/prisma.js";
+import type { Prisma } from "../generated/prisma/client.js";
+import type { ActorType } from "../generated/prisma/enums.js";
+import { PurchaseOrderStatus, ShipmentStatus } from "../generated/prisma/enums.js";
+import {
+  buildReceiptLines,
+  type ReceiptLine,
+  type ReceiptQuantities,
+  receiptStatus,
+} from "../rules/receiptRules.js";
+import { AppError } from "../utils/AppError.js";
+import { recordAudit } from "./audit.service.js";
+import {
+  type PurchaseOrderView,
+  purchaseOrderViewSelect,
+  type ShipmentView,
+  shipmentViewSelect,
+} from "./purchaseOrder.service.js";
+
+const GOODS_RECEIPT_ENTITY = "GoodsReceipt";
+
+/** Purchase-order statuses a delivery may be received against. */
+const RECEIVABLE_PO_STATUSES: PurchaseOrderStatus[] = [
+  PurchaseOrderStatus.APPROVED,
+  // Nothing writes SHIPPED today — approval leaves the purchase order APPROVED
+  // with its shipment IN_TRANSIT. Accepted here so a future shipping step needs
+  // no change to the receipt flow.
+  PurchaseOrderStatus.SHIPPED,
+];
+
+// ---------------------------------------------------------------------------
+// Read shapes
+// ---------------------------------------------------------------------------
+
+export const goodsReceiptViewSelect = {
+  id: true,
+  purchaseOrderId: true,
+  shipmentId: true,
+  status: true,
+  receivedAt: true,
+  receivedBy: true,
+  notes: true,
+  createdAt: true,
+  items: {
+    // Every nested-created row shares one createdAt, so the timestamp alone
+    // leaves the order to the database; id breaks the tie deterministically.
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      purchaseOrderItemId: true,
+      productId: true,
+      orderedQuantity: true,
+      receivedQuantity: true,
+      damagedQuantity: true,
+      acceptedQuantity: true,
+    },
+  },
+} satisfies Prisma.GoodsReceiptSelect;
+
+export type GoodsReceiptView = Prisma.GoodsReceiptGetPayload<{
+  select: typeof goodsReceiptViewSelect;
+}>;
+
+export interface ShipmentWithReceipt {
+  shipment: ShipmentView;
+  goodsReceipt: GoodsReceiptView | null;
+}
+
+export interface GoodsReceiptResult extends ShipmentWithReceipt {
+  goodsReceipt: GoodsReceiptView;
+  purchaseOrder: PurchaseOrderView;
+  /** False when an identical receipt already existed — the caller answers 200 rather than 201. */
+  created: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Reads
+// ---------------------------------------------------------------------------
+
+const shipmentWithContextSelect = {
+  ...shipmentViewSelect,
+  goodsReceipt: { select: goodsReceiptViewSelect },
+  purchaseOrder: {
+    select: {
+      id: true,
+      status: true,
+      items: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, productId: true, quantity: true },
+      },
+    },
+  },
+} satisfies Prisma.ShipmentSelect;
+
+type ShipmentWithContext = Prisma.ShipmentGetPayload<{ select: typeof shipmentWithContextSelect }>;
+
+async function findShipment(params: {
+  organizationId: string;
+  shipmentId: string;
+}): Promise<ShipmentWithContext> {
+  const shipment = await prisma.shipment.findFirst({
+    where: { id: params.shipmentId, organizationId: params.organizationId },
+    select: shipmentWithContextSelect,
+  });
+
+  if (!shipment) {
+    // A shipment owned by another organization is a 404, not a 403 — a 403
+    // would confirm that the id exists.
+    throw AppError.notFound("Shipment not found");
+  }
+
+  return shipment;
+}
+
+/** Splits the loaded row into the public shipment view and its context. */
+function toShipmentView(shipment: ShipmentWithContext): ShipmentView {
+  const { goodsReceipt: _receipt, purchaseOrder: _po, ...view } = shipment;
+  return view;
+}
+
+export async function getShipment(params: {
+  organizationId: string;
+  shipmentId: string;
+}): Promise<ShipmentWithReceipt> {
+  const shipment = await findShipment(params);
+  return { shipment: toShipmentView(shipment), goodsReceipt: shipment.goodsReceipt };
+}
+
+// ---------------------------------------------------------------------------
+// Goods receipt
+// ---------------------------------------------------------------------------
+
+export interface RecordGoodsReceiptInput extends ReceiptQuantities {
+  organizationId: string;
+  shipmentId: string;
+  /** USER from the simulate endpoint; SYSTEM when a future IoT integration reports a delivery. */
+  actorType: ActorType;
+  actorId?: string | null;
+  receivedBy?: string;
+  notes?: string;
+}
+
+/**
+ * Records the goods receipt for a shipment: shipment → DELIVERED, purchase
+ * order → RECEIVED, one GoodsReceipt with a line per ordered item.
+ *
+ * Transport-agnostic on purpose — the HTTP controller is the only thing that
+ * knows about `req`, so an IoT webhook or a worker can call this directly.
+ *
+ * Idempotent: GoodsReceipt.shipmentId is unique, so a replayed delivery returns
+ * the receipt already on file and writes no second audit row. A replay reporting
+ * *different* quantities is a conflict, not a silent no-op — see
+ * assertReplayMatches.
+ */
+export async function recordGoodsReceipt(
+  input: RecordGoodsReceiptInput,
+): Promise<GoodsReceiptResult> {
+  const { organizationId, shipmentId } = input;
+  const shipment = await findShipment({ organizationId, shipmentId });
+
+  // Runs before anything else: a malformed payload must never open a
+  // transaction, and a replay has to be compared against what was stored.
+  const lines = buildReceiptLines(shipment.purchaseOrder.items, input);
+
+  if (shipment.goodsReceipt) {
+    assertReplayMatches(shipment.goodsReceipt, lines);
+    return {
+      created: false,
+      shipment: toShipmentView(shipment),
+      goodsReceipt: shipment.goodsReceipt,
+      purchaseOrder: await loadPurchaseOrderView(prisma, shipment.purchaseOrder.id),
+    };
+  }
+
+  assertReceivable(shipment);
+
+  const status = receiptStatus(lines);
+  const receivedAt = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    // Guarded so two concurrent deliveries cannot both claim the shipment.
+    const claimed = await tx.shipment.updateMany({
+      where: { id: shipmentId, organizationId, status: ShipmentStatus.IN_TRANSIT },
+      data: { status: ShipmentStatus.DELIVERED, deliveredAt: receivedAt },
+    });
+
+    if (claimed.count === 0) {
+      throw AppError.conflict("Shipment was updated concurrently", { shipmentId });
+    }
+
+    const goodsReceipt = await tx.goodsReceipt.create({
+      data: {
+        organizationId,
+        purchaseOrderId: shipment.purchaseOrder.id,
+        shipmentId,
+        status,
+        receivedAt,
+        receivedBy: input.receivedBy ?? input.actorId ?? null,
+        notes: input.notes ?? null,
+        // Nested create: a rollback can never leave an item-less receipt.
+        items: { create: lines },
+      },
+      select: goodsReceiptViewSelect,
+    });
+
+    // Unguarded on count: a purchase order already RECEIVED is fine, and the
+    // shipment claim above is what makes this run at most once.
+    await tx.purchaseOrder.updateMany({
+      where: {
+        id: shipment.purchaseOrder.id,
+        organizationId,
+        status: { in: RECEIVABLE_PO_STATUSES },
+      },
+      data: { status: PurchaseOrderStatus.RECEIVED },
+    });
+
+    await recordAudit(tx, {
+      organizationId,
+      actorType: input.actorType,
+      actorId: input.actorId ?? null,
+      action: "GOODS_RECEIVED",
+      entityType: GOODS_RECEIPT_ENTITY,
+      entityId: goodsReceipt.id,
+      metadata: {
+        shipmentId,
+        purchaseOrderId: shipment.purchaseOrder.id,
+        status,
+        ...totals(lines),
+      },
+    });
+
+    const updatedShipment = await tx.shipment.findUniqueOrThrow({
+      where: { id: shipmentId },
+      select: shipmentViewSelect,
+    });
+
+    return {
+      created: true,
+      shipment: updatedShipment,
+      goodsReceipt,
+      purchaseOrder: await loadPurchaseOrderView(tx, shipment.purchaseOrder.id),
+    };
+  });
+}
+
+function totals(
+  lines: { receivedQuantity: number; damagedQuantity: number; acceptedQuantity: number }[],
+) {
+  return {
+    receivedQuantity: lines.reduce((sum, line) => sum + line.receivedQuantity, 0),
+    damagedQuantity: lines.reduce((sum, line) => sum + line.damagedQuantity, 0),
+    acceptedQuantity: lines.reduce((sum, line) => sum + line.acceptedQuantity, 0),
+  };
+}
+
+function loadPurchaseOrderView(
+  db: Pick<Prisma.TransactionClient, "purchaseOrder">,
+  purchaseOrderId: string,
+): Promise<PurchaseOrderView> {
+  return db.purchaseOrder.findUniqueOrThrow({
+    where: { id: purchaseOrderId },
+    select: purchaseOrderViewSelect,
+  });
+}
+
+/**
+ * Guards the idempotent path against a replay that is not actually a replay.
+ *
+ * Returning 200 with the stored receipt for a payload reporting different
+ * quantities would tell a warehouse correcting 98 → 100 that the correction was
+ * recorded, while matching went on using the stale accepted quantity. A receipt
+ * is immutable, so the divergent call is refused instead.
+ */
+function assertReplayMatches(stored: GoodsReceiptView, lines: ReceiptLine[]): void {
+  const storedByItem = new Map(stored.items.map((item) => [item.purchaseOrderItemId, item]));
+
+  for (const line of lines) {
+    const item = storedByItem.get(line.purchaseOrderItemId);
+
+    if (
+      !item ||
+      item.receivedQuantity !== line.receivedQuantity ||
+      item.damagedQuantity !== line.damagedQuantity
+    ) {
+      throw AppError.conflict(
+        "This shipment already has a goods receipt recording different quantities",
+        {
+          goodsReceiptId: stored.id,
+          purchaseOrderItemId: line.purchaseOrderItemId,
+          recorded: item
+            ? { receivedQuantity: item.receivedQuantity, damagedQuantity: item.damagedQuantity }
+            : null,
+          submitted: {
+            receivedQuantity: line.receivedQuantity,
+            damagedQuantity: line.damagedQuantity,
+          },
+        },
+      );
+    }
+  }
+}
+
+function assertReceivable(shipment: ShipmentWithContext): void {
+  if (shipment.status === ShipmentStatus.CREATED) {
+    throw AppError.invalidState("Shipment has not left the supplier yet", {
+      status: shipment.status,
+    });
+  }
+
+  if (shipment.status === ShipmentStatus.DELIVERED) {
+    // The shipment update and the receipt commit together, so this cannot
+    // happen through the API. Report the inconsistency instead of back-filling
+    // a receipt for goods nobody recorded.
+    throw AppError.invalidState("Shipment is already delivered but carries no goods receipt", {
+      status: shipment.status,
+    });
+  }
+
+  if (!RECEIVABLE_PO_STATUSES.includes(shipment.purchaseOrder.status)) {
+    throw AppError.invalidState(
+      `A ${shipment.purchaseOrder.status} purchase order cannot receive goods`,
+      { purchaseOrderStatus: shipment.purchaseOrder.status },
+    );
+  }
+}
