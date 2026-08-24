@@ -1,7 +1,8 @@
 # Shipments and Goods Receipts API Reference (Frontend)
 
 How a client reads a shipment and simulates its delivery. See `architecture/goods-receipt.md` for
-the backend design, and `api-docs/purchase-orders-api.md` for the stage that precedes this.
+the backend design, `api-docs/purchase-orders-api.md` for the stage that precedes this, and
+`api-docs/invoices-api.md` for the one that follows.
 
 Conventions (headers, envelope, error codes) are identical to the requisitions API — see
 `api-docs/requisitions-api.md`. Every request carries `x-organization-id`.
@@ -18,7 +19,7 @@ GET /shipments/:id                 ──▶ status IN_TRANSIT, goodsReceipt nul
 POST /receipts/simulate            ──▶ shipment DELIVERED, PO RECEIVED, GoodsReceipt created
         │
         ▼
-POST /invoices                     (next stage)
+POST /invoices                     (next stage — see invoices-api.md)
 ```
 
 The shipment id comes from `GET /purchase-orders/:id`, which returns `{ purchaseOrder, shipment }`.

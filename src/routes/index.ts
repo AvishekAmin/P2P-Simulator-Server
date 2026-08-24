@@ -3,6 +3,7 @@ import { attachTenant, requireOrganization } from "../middleware/auth.js";
 import { apiRateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { healthRouter } from "./health.routes.js";
+import { invoiceRouter } from "./invoice.routes.js";
 import { purchaseOrderRouter } from "./purchaseOrder.routes.js";
 import { receiptRouter } from "./receipt.routes.js";
 import { requisitionRouter } from "./requisition.routes.js";
@@ -21,7 +22,8 @@ apiV1Router.use("/requisitions", requisitionRouter);
 apiV1Router.use("/purchase-orders", purchaseOrderRouter);
 apiV1Router.use("/shipments", shipmentRouter);
 apiV1Router.use("/receipts", receiptRouter);
+apiV1Router.use("/invoices", invoiceRouter);
 
-// Mount point for the remaining resources: suppliers, invoices, matching,
-// payments, exceptions.
+// Mount point for the remaining resources: suppliers, matching, payments,
+// exceptions.
 rootRouter.use("/api/v1", apiV1Router);

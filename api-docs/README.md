@@ -10,7 +10,8 @@ is `/api/v1` (e.g. `POST /api/v1/requisitions`).
 | 2. Supplier discovery | [`sourcing-api.md`](./sourcing-api.md) | none — read through `GET /requisitions/:id` |
 | 3. Purchase order | [`purchase-orders-api.md`](./purchase-orders-api.md) | `POST /purchase-orders/:id/approve`, `POST /purchase-orders/:id/reject`, `GET /purchase-orders/:id`, `GET /purchase-orders` |
 | 4. Shipment & goods receipt | [`receipts-api.md`](./receipts-api.md) | `GET /shipments/:id`, `POST /receipts/simulate` |
-| 5. Invoice, matching, payment, exceptions | **not implemented yet** | see [Not yet available](#not-yet-available) |
+| 5. Invoice upload & extraction | [`invoices-api.md`](./invoices-api.md) | `POST /invoices`, `GET /invoices/:id`, `GET /invoices` |
+| 6. Matching, payment, exceptions | **not implemented yet** | see [Not yet available](#not-yet-available) |
 
 ## The whole flow, end to end
 
@@ -36,7 +37,15 @@ is `/api/v1` (e.g. `POST /api/v1/requisitions`).
    Goods Receipt          POST /receipts/simulate  shipment DELIVERED, PO RECEIVED
         │
         ▼
-5. Invoice → Match → Pay  NOT IMPLEMENTED — see below
+5. Invoice               POST /invoices           multipart upload → 202, status UPLOADED
+        │
+        ▼ automatic — invoice worker (Gemini Vision)
+                         GET /invoices/:id        poll until status leaves UPLOADED/PROCESSING
+                         └─▶ EXTRACTED     fields + line items populated
+                         └─▶ FAILED        extraction gave up (terminal)
+        │
+        ▼
+6. Match → Pay           NOT IMPLEMENTED — see below
 ```
 
 Every stage after the initial `POST /requisitions` call is either:
@@ -101,18 +110,21 @@ watching those once you're in `PO_CREATED`.
 3. **PO approve/reject buttons**, wired to `purchaseOrder.status === "PENDING_APPROVAL"`.
 4. **Shipment/receipt screen.** `GET /shipments/:id`, with a "Simulate delivery" form posting to
    `/receipts/simulate`.
-5. Stop here until invoice/matching/payment/exceptions ship — see below.
+5. **Invoice upload.** A file picker posting `multipart/form-data` to `/invoices`, then a poll on
+   `GET /invoices/:id` until `status` is `EXTRACTED` — the same poll-and-reveal pattern as step 2.
+6. Stop here until matching/payment/exceptions ship — see below.
 
 ## Not yet available
 
 Do not build against these — they will 404 or don't exist:
 
-- `POST /invoices`, invoice upload, Gemini Vision extraction
-- Three-way matching, `ThreeWayMatch`/`MatchCheck` endpoints
+- Three-way matching, `ThreeWayMatch`/`MatchCheck` endpoints. Invoice extraction *is* built, but
+  the matching queue has no consumer, so an invoice rests at `EXTRACTED` and never reaches
+  `MATCHING`/`APPROVED`/`PAID`
 - Payments (`Payment` is simulated but has no worker/queue consumer wired up yet)
-- `GET /exceptions`, `GET /exceptions/:id`, `POST /exceptions/:id/resolve` — a `NO_SUPPLIER_FOUND`
-  exception row is written on sourcing failure today, but it's only reachable via
-  `requisition.failureReason`, not a dedicated endpoint
+- `GET /exceptions`, `GET /exceptions/:id`, `POST /exceptions/:id/resolve` — `NO_SUPPLIER_FOUND` and
+  `INVOICE_EXTRACTION_FAILED` exception rows are written today, but they're only reachable via
+  `requisition.failureReason` / `invoice.failureReason`, not a dedicated endpoint
 - `GET /suppliers`, `GET /suppliers/:id`
 - `GET /audit-logs`
 - Socket.IO realtime events — polling is the only mechanism today

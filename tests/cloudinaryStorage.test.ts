@@ -1,7 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { AppError } from "../src/utils/AppError.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UploadInput } from "../src/storage/storage.interface.js";
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from "../src/storage/storage.interface.js";
+import { AppError } from "../src/utils/AppError.js";
 
 // ---------------------------------------------------------------------------
 // Mock the cloudinary SDK before importing the module under test.
@@ -23,9 +23,7 @@ vi.mock("cloudinary", () => ({
 }));
 
 // Import after the mock is registered so the module picks up the stub.
-const { CloudinaryStorage, buildPublicId } = await import(
-  "../src/storage/cloudinary.storage.js"
-);
+const { CloudinaryStorage, buildPublicId } = await import("../src/storage/cloudinary.storage.js");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,7 +50,8 @@ function stubSuccessfulUpload(bytes = 1024) {
   mockUploadStream.mockImplementation((_opts: unknown, cb: Function) => {
     const fakeResult = {
       public_id: "p2p/invoices/inv-001/receipt",
-      secure_url: "https://res.cloudinary.com/test/image/authenticated/p2p/invoices/inv-001/receipt.pdf",
+      secure_url:
+        "https://res.cloudinary.com/test/image/authenticated/p2p/invoices/inv-001/receipt.pdf",
       bytes,
     };
     // Return a stream-like object with an `end` method.
@@ -227,6 +226,75 @@ describe("CloudinaryStorage", () => {
   });
 
   // -----------------------------------------------------------------------
+  // Download
+  // -----------------------------------------------------------------------
+
+  describe("download", () => {
+    it("fetches the signed URL and returns the bytes", async () => {
+      mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
+      const body = Buffer.from("%PDF-1.4\nfake-pdf-content");
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => body });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await storage.download("p2p/invoices/inv-001/receipt", "application/pdf");
+
+      expect(result.equals(body)).toBe(true);
+      // Assets are stored as `type: "authenticated"`, so an unsigned URL 401s.
+      expect(fetchMock).toHaveBeenCalledWith("https://res.cloudinary.com/signed-url");
+      expect(mockUrl).toHaveBeenCalledWith(
+        "p2p/invoices/inv-001/receipt",
+        expect.objectContaining({ sign_url: true, type: "authenticated", format: "pdf" }),
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it("reports a missing object as NOT_FOUND so the caller does not retry it", async () => {
+      mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+      await expect(storage.download("missing-key", "application/pdf")).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+
+      vi.unstubAllGlobals();
+    });
+
+    it("reports a server-side failure as DEPENDENCY_UNAVAILABLE", async () => {
+      mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+
+      await expect(storage.download("key", "application/pdf")).rejects.toMatchObject({
+        code: "DEPENDENCY_UNAVAILABLE",
+      });
+
+      vi.unstubAllGlobals();
+    });
+
+    it("treats a rate-limited response as retryable", async () => {
+      mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 429 }));
+
+      await expect(storage.download("key", "application/pdf")).rejects.toMatchObject({
+        code: "DEPENDENCY_UNAVAILABLE",
+      });
+
+      vi.unstubAllGlobals();
+    });
+
+    it("reports a network failure as DEPENDENCY_UNAVAILABLE", async () => {
+      mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
+
+      await expect(storage.download("key", "application/pdf")).rejects.toMatchObject({
+        code: "DEPENDENCY_UNAVAILABLE",
+      });
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // getUrl
   // -----------------------------------------------------------------------
 
@@ -234,7 +302,7 @@ describe("CloudinaryStorage", () => {
     it("delegates to cloudinary.url with authenticated + signed options", () => {
       mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
 
-      const url = storage.getUrl("p2p/invoices/inv-001/receipt");
+      const url = storage.getUrl("p2p/invoices/inv-001/receipt", "application/pdf");
 
       expect(url).toBe("https://res.cloudinary.com/signed-url");
       expect(mockUrl).toHaveBeenCalledWith("p2p/invoices/inv-001/receipt", {
@@ -242,7 +310,42 @@ describe("CloudinaryStorage", () => {
         type: "authenticated",
         secure: true,
         sign_url: true,
+        format: "pdf",
       });
+    });
+
+    // Regression: without an explicit format, Cloudinary reads the segment after
+    // the last dot of `.../Invoice_v1.2` as the format, resolving public_id
+    // `.../Invoice_v1` + format `2` — an object that does not exist. The signed
+    // URL then denies, download() maps the 4xx to NOT_FOUND, and the invoice
+    // worker treats NOT_FOUND as permanent and fails the invoice with no retry.
+    it("names the format so a storage key containing a dot still resolves", () => {
+      mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
+
+      storage.getUrl("p2p/invoices/inv-1/Invoice_v1.2", "image/png");
+
+      expect(mockUrl).toHaveBeenCalledWith(
+        "p2p/invoices/inv-1/Invoice_v1.2",
+        expect.objectContaining({ format: "png" }),
+      );
+    });
+
+    it("requests JPEGs as jpg, the format Cloudinary actually stores", () => {
+      mockUrl.mockReturnValue("https://res.cloudinary.com/signed-url");
+
+      storage.getUrl("p2p/invoices/inv-1/scan", "image/jpeg");
+
+      expect(mockUrl).toHaveBeenCalledWith(
+        "p2p/invoices/inv-1/scan",
+        expect.objectContaining({ format: "jpg" }),
+      );
+    });
+
+    it("rejects a MIME type it cannot map to a delivery format", () => {
+      expect(() => storage.getUrl("p2p/invoices/inv-1/scan", "application/zip")).toThrow(AppError);
+      expect(() => storage.getUrl("p2p/invoices/inv-1/scan", "application/zip")).toThrow(
+        expect.objectContaining({ code: "VALIDATION_ERROR" }),
+      );
     });
   });
 });

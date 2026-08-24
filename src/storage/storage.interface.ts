@@ -1,11 +1,20 @@
 /** Allowed MIME types for invoice document uploads. */
-export const ALLOWED_MIME_TYPES = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-] as const;
+export const ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg"] as const;
 
 export type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
+
+/**
+ * Cloudinary's canonical delivery format for each allowed MIME type.
+ *
+ * JPEG maps to `jpg`, not `jpeg` — that is the format Cloudinary stores and
+ * serves, and asking for a different extension triggers an on-the-fly
+ * conversion rather than a plain read of the stored asset.
+ */
+export const FORMAT_BY_MIME_TYPE: Record<AllowedMimeType, string> = {
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+};
 
 /** Maximum upload size in bytes (10 MB). */
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -40,6 +49,21 @@ export interface UploadResult {
  */
 export interface StorageProvider {
   upload(input: UploadInput): Promise<UploadResult>;
+  /**
+   * Fetch the stored bytes back — the invoice worker needs them to send to Gemini.
+   *
+   * `mimeType` is required because the delivery URL must name the format
+   * explicitly; see getUrl().
+   */
+  download(storageKey: string, mimeType: string): Promise<Buffer>;
   delete(storageKey: string): Promise<void>;
-  getUrl(storageKey: string): string;
+  /**
+   * Build a delivery URL for a stored object.
+   *
+   * `mimeType` is not optional: a provider whose delivery path encodes the
+   * format as a file extension cannot tell `{key}` from `{key-minus-suffix}` +
+   * format unless the format is stated. Leaving it off makes any storage key
+   * containing a dot resolve to the wrong object.
+   */
+  getUrl(storageKey: string, mimeType: string): string;
 }

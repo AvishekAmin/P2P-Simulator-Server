@@ -3,6 +3,7 @@ import { type Processor, Worker } from "bullmq";
 import { QUEUE_NAMES, type QueueName } from "../config/constants.js";
 import { disconnectPrisma } from "../config/prisma.js";
 import { createRedisConnection } from "../config/redis.js";
+import { processInvoiceJob } from "./invoice.worker.js";
 import { processPurchaseOrderJob } from "./purchaseOrder.worker.js";
 import { processRequisitionJob } from "./requisition.worker.js";
 import { processSupplierDiscoveryJob } from "./supplierDiscovery.worker.js";
@@ -14,6 +15,7 @@ const PROCESSORS: Partial<Record<QueueName, Processor>> = {
   [QUEUE_NAMES.REQUISITION]: processRequisitionJob,
   [QUEUE_NAMES.SUPPLIER_DISCOVERY]: processSupplierDiscoveryJob,
   [QUEUE_NAMES.PURCHASE_ORDER]: processPurchaseOrderJob,
+  [QUEUE_NAMES.INVOICE]: processInvoiceJob,
 };
 
 function startWorkers(): Worker[] {

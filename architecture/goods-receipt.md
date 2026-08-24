@@ -4,8 +4,9 @@ The stage between purchase-order approval and invoice matching: an approved purc
 carries a shipment, and a delivery event turns that shipment into a `GoodsReceipt` — the record of
 what actually arrived.
 
-See `architecture/purchase-orders.md` for the stage that feeds this one, and
-`api-docs/receipts-api.md` for the client contract.
+See `architecture/purchase-orders.md` for the stage that feeds this one,
+`architecture/invoices.md` for the stage that follows, and `api-docs/receipts-api.md` for the client
+contract.
 
 ## Flow
 
