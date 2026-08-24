@@ -52,6 +52,16 @@ export function calculatePurchaseOrderTotals(
     throw AppError.validation("A purchase order must have at least one line item");
   }
 
+  // Checked before any line math so a bad rate is rejected the same way whether
+  // the lines are worth ₹0 or ₹1 crore. A fractional or negative rate would
+  // otherwise silently produce a wrong or negative tax figure.
+  if (!Number.isInteger(taxRateBps) || taxRateBps < 0 || taxRateBps > MAX_MONEY_PAISE) {
+    throw AppError.validation(
+      "Purchase order tax rate must be a non-negative integer number of basis points",
+      { taxRateBps },
+    );
+  }
+
   const items = lines.map((line) => {
     if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
       throw AppError.validation("Purchase order line quantity must be a positive integer", {

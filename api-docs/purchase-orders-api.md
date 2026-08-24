@@ -126,8 +126,9 @@ second shipment is created, and no duplicate audit rows are written. Safe to ret
 { "reason": "Price is too high" }
 ```
 
-`reason` is **required** (1–500 characters). It is written to the audit trail and copied to the
-requisition's `failureReason`.
+`reason` is **required** (1–500 characters). It is written to the audit trail, stored verbatim on
+`purchaseOrder.rejectionReason`, and written to the requisition's `failureReason` prefixed with
+`Purchase order rejected: `.
 
 ```json
 {

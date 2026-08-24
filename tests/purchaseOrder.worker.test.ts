@@ -21,7 +21,7 @@ vi.mock("../src/config/prisma.js", () => ({
 }));
 
 const { processPurchaseOrderJob } = await import("../src/workers/purchaseOrder.worker.js");
-const { applyPurchaseOrderCreation, listPurchaseOrders } = await import(
+const { applyPurchaseOrderCreation, buildPoNumber, listPurchaseOrders } = await import(
   "../src/services/purchaseOrder.service.js"
 );
 
@@ -134,8 +134,11 @@ describe("processPurchaseOrderJob — happy path", () => {
       totalPaise: 21_476_000,
       taxRateBps: 1800,
     });
-    // Derived from the requisition id, so a retry regenerates the same number.
-    expect(data.poNumber).toMatch(/^PO-\d{8}-ABC123$/);
+    // Derived from the whole requisition id, so a retry regenerates the same
+    // number and two ids sharing a tail cannot collide.
+    expect(data.poNumber).toMatch(/^PO-\d{8}-[0-9A-Z]{6}$/);
+    const now = new Date();
+    expect(data.poNumber).toBe(buildPoNumber(REQ, now));
   });
 
   it("creates the line item in the same nested write", async () => {
@@ -298,7 +301,9 @@ describe("processPurchaseOrderJob — technical failure", () => {
     await expect(processPurchaseOrderJob(job({ attemptsMade: 0 }))).rejects.toThrow(
       /no requirement or sourcing decision/,
     );
-    expect(db.requisition.update).not.toHaveBeenCalled();
+    // applyPurchaseOrderFailure writes through updateMany — the terminal path
+    // must not run while retries remain.
+    expect(db.requisition.updateMany).not.toHaveBeenCalled();
   });
 
   it("records a SYSTEM_FAILURE exception on the final attempt", async () => {

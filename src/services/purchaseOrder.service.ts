@@ -185,17 +185,36 @@ function yyyymmdd(date: Date): string {
 }
 
 /**
+ * Deterministic fixed-width suffix over the *whole* id.
+ *
+ * A trailing slice would only distinguish ids by their last few characters, so
+ * two different requisitions sharing that tail would collide on
+ * @@unique([organizationId, poNumber]). FNV-1a over the full id spreads every
+ * character into the suffix while staying a pure function of the id, which is
+ * what makes a retry regenerate the identical value.
+ */
+function idSuffix(id: string, length: number): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    // FNV prime, via shifts so the whole thing stays inside 32-bit math.
+    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+  }
+  return hash.toString(36).toUpperCase().padStart(length, "0").slice(-length);
+}
+
+/**
  * Derived from the requisition id, which is already unique, so a retried job
  * regenerates the identical number instead of racing
  * @@unique([organizationId, poNumber]) with a fresh random suffix.
  */
 export function buildPoNumber(requisitionId: string, now: Date): string {
-  return `PO-${yyyymmdd(now)}-${requisitionId.slice(-6).toUpperCase()}`;
+  return `PO-${yyyymmdd(now)}-${idSuffix(requisitionId, 6)}`;
 }
 
 /** Same reasoning as buildPoNumber, against @@unique([organizationId, trackingNumber]). */
 export function buildTrackingNumber(purchaseOrderId: string): string {
-  return `TRK-${purchaseOrderId.slice(-8).toUpperCase()}`;
+  return `TRK-${idSuffix(purchaseOrderId, 8)}`;
 }
 
 export function addDays(from: Date, days: number): Date {

@@ -84,6 +84,15 @@ describe("calculatePurchaseOrderTotals", () => {
     expect(totals.totalPaise).toBe(1_000_000);
   });
 
+  // A bad tax rate has to be caught before any line math, so it is rejected
+  // even when the lines themselves are worth nothing.
+  it.each([-1, 0.5, MAX_MONEY_PAISE + 1])("refuses a tax rate of %s", (taxRateBps) => {
+    expect(() => calculatePurchaseOrderTotals([line()], taxRateBps)).toThrow(AppError);
+    expect(() => calculatePurchaseOrderTotals([line({ unitPricePaise: 0 })], taxRateBps)).toThrow(
+      AppError,
+    );
+  });
+
   it("refuses a non-positive quantity", () => {
     expect(() =>
       calculatePurchaseOrderTotals([line({ quantity: 0 })], DEFAULT_TAX_RATE_BPS),
