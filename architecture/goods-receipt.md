@@ -50,6 +50,9 @@ transaction, and the arithmetic is unit-testable on its own (`tests/receiptRules
 - Over-receipt is refused. The simulator does not model receiving more than was ordered.
 - A receipt recording zero units is refused: it would move the purchase order to `RECEIVED` on no
   goods at all. A delivery where nothing arrived is a shipment problem, not a receipt.
+- `GoodsReceipt.receivedBy` falls back to the calling actor's id (`input.receivedBy ?? input.actorId
+  ?? null`) when the request omits it — for `POST /receipts/simulate` that means the dev-tenant user,
+  not `null`, unless the caller explicitly passes `receivedBy: null`.
 
 ## Purchase-order lifecycle
 

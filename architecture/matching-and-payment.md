@@ -83,7 +83,7 @@ match as `MATCHED` only if every one passes:
 | `ORDERED_QUANTITY` | PO quantity vs. the goods receipt's own record of what was ordered | a consistency check on the receipt, not a delivery check |
 | `RECEIVED_QUANTITY` | PO quantity vs. `acceptedQuantity` (received − damaged) | fails outright if no goods receipt exists yet |
 | `INVOICED_QUANTITY` | Accepted quantity vs. invoiced quantity | **the rule the engine exists for** — the demo mismatch (100 ordered, 98 received, 2 damaged, 100 invoiced) fails here against 96 accepted |
-| `UNIT_PRICE` | PO unit price vs. each invoice line's unit price | per invoice line, not averaged — a supplier who splits a line and raises the price on half of it is still caught |
+| `UNIT_PRICE` | PO unit price vs. each invoice line's unit price | per invoice line, not averaged — a supplier who splits a line and raises the price on half of it is still caught; 2% tolerance (shares `MATCH_TOLERANCES.PRICE_PERCENTAGE` with `SUBTOTAL`) |
 | `SUBTOTAL` | PO subtotal vs. invoice subtotal | 2% tolerance |
 | `TAX` | PO tax vs. invoice tax | 1% tolerance |
 | `TOTAL` | PO total vs. invoice total | 1% tolerance |
@@ -218,8 +218,10 @@ rather than a correctness bug.
   `payment.completed` events in CLAUDE.md's realtime spec do not exist yet. Poll `GET /invoices/:id`
   and `GET /exceptions` instead.
 - No `GET /payments` or `GET /payments/:id` endpoint. A payment's state is only visible indirectly,
-  through `Invoice.status` and (once wired up) an invoice detail response — there is no standalone
-  payment read endpoint today.
-- `GET /audit-logs` does not exist — the audit trail above is written but not queryable from the API.
+  through `Invoice.status` — there is no standalone payment read endpoint today.
 - No partial exception resolution UI concept: resolving one of two open exceptions on an invoice does
   not release it — the API reports `releasedForPayment: false` and the caller must resolve the rest.
+
+`GET /audit-logs` **is** implemented and queryable — see `api-docs/audit-logs-api.md`. Every audit
+action listed above (`MATCH_STARTED`, `EXCEPTION_CREATED`, `PAYMENT_COMPLETED`, etc.) is fetchable
+through it today.

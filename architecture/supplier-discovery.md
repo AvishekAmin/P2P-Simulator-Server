@@ -220,7 +220,7 @@ unit-testable in isolation.
 
 ## Testing
 
-`pnpm test` — 80 tests across five files under `tests/`, no database, Gemini always mocked.
+`pnpm test` — 82 tests across five files under `tests/`, no database, Gemini always mocked.
 
 ```text
 supplierRanking.test.ts           (23)  scoring arithmetic, all 6 eligibility rules, tie-breaks,
@@ -232,7 +232,7 @@ productMatching.test.ts           (18)  the real seeded catalog: plurals, SKUs, 
                                         NO_MATCH and AMBIGUOUS
 sourcingRationale.test.ts         (11)  fallback on every Gemini failure mode; the sanity gate
                                         accepts plain English and rejects leaked identifiers
-requisitionDetail.test.ts          (7)  the client-facing read shape: winner-name resolution,
+requisitionDetail.test.ts          (9)  the client-facing read shape: winner-name resolution,
                                         the null-sourcing case, tenant scoping
 ```
 
@@ -249,5 +249,6 @@ carries those joins so the extraction worker's own load stays lean. Client contr
 - Ranking never involves Gemini (CLAUDE.md §3). The one AI call is cosmetic and fully non-fatal.
 - `AIProcessingLog` records the rationale call as `generate-sourcing-rationale` / `sourcing.v1`,
   including failures — an outage is visible without ever failing a job.
-- `purchase-order` jobs queue and wait; that worker is the next phase.
+- `purchase-order` jobs queue and are consumed by `src/workers/purchaseOrder.worker.ts`
+  ([Phase 6](./purchase-orders.md)) — sourcing does not wait on it, just enqueues.
 - Socket.IO events and the `/api/v1/suppliers` read routes are out of scope here.
