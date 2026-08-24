@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DEFAULT_JOB_OPTIONS, type QueueName } from "../config/constants.js";
 import { redis } from "../config/redis.js";
 import { AppError } from "../utils/AppError.js";
+import { closeQueueEvents } from "./jobResult.js";
 
 const registry: Queue[] = [];
 
@@ -44,5 +45,6 @@ export async function enqueue<T>(
 }
 
 export async function closeQueues(): Promise<void> {
+  await closeQueueEvents();
   await Promise.all(registry.map((queue) => queue.close()));
 }

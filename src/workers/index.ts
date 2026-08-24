@@ -1,15 +1,18 @@
 import "../config/env.js";
 import { type Processor, Worker } from "bullmq";
-import type { QueueName } from "../config/constants.js";
+import { QUEUE_NAMES, type QueueName } from "../config/constants.js";
 import { disconnectPrisma } from "../config/prisma.js";
 import { createRedisConnection } from "../config/redis.js";
+import { processRequisitionJob } from "./requisition.worker.js";
+import { processSupplierDiscoveryJob } from "./supplierDiscovery.worker.js";
 
 const WORKER_CONCURRENCY = 5;
 
-// Register a processor here as each queue's business logic is implemented,
-// e.g. { [QUEUE_NAMES.REQUISITION]: processRequisitionJob }. Empty for now —
-// this phase only stands up the worker process shell.
-const PROCESSORS: Partial<Record<QueueName, Processor>> = {};
+// Register a processor here as each queue's business logic is implemented.
+const PROCESSORS: Partial<Record<QueueName, Processor>> = {
+  [QUEUE_NAMES.REQUISITION]: processRequisitionJob,
+  [QUEUE_NAMES.SUPPLIER_DISCOVERY]: processSupplierDiscoveryJob,
+};
 
 function startWorkers(): Worker[] {
   const entries = Object.entries(PROCESSORS) as [QueueName, Processor][];

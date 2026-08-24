@@ -16,6 +16,8 @@ export const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
 
+  CORS_ORIGIN: z.string().optional(),
+
   DEV_ORGANIZATION_ID: z.string().default("dev-org"),
   DEV_USER_ID: z.string().default("dev-user"),
 });
