@@ -52,7 +52,9 @@ transaction, and the arithmetic is unit-testable on its own (`tests/receiptRules
   goods at all. A delivery where nothing arrived is a shipment problem, not a receipt.
 - `GoodsReceipt.receivedBy` falls back to the calling actor's id (`input.receivedBy ?? input.actorId
   ?? null`) when the request omits it — for `POST /receipts/simulate` that means the dev-tenant user,
-  not `null`, unless the caller explicitly passes `receivedBy: null`.
+  never `null`. The request schema types `receivedBy` as an optional string, not nullable, so a caller
+  cannot pass `receivedBy: null` through this endpoint to force the field to `null`; that would fail
+  Zod validation before reaching the service.
 
 ## Purchase-order lifecycle
 
