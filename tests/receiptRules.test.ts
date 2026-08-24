@@ -80,6 +80,34 @@ describe("buildReceiptLines — flat payload", () => {
     );
   });
 
+  it("refuses a negative received quantity", () => {
+    expectValidationError(
+      () => buildReceiptLines([KEYBOARDS], { receivedQuantity: -5 }),
+      /receivedQuantity must be a whole, non-negative number/i,
+    );
+  });
+
+  it("refuses a negative damaged quantity", () => {
+    expectValidationError(
+      () => buildReceiptLines([KEYBOARDS], { receivedQuantity: 10, damagedQuantity: -1 }),
+      /damagedQuantity must be a whole, non-negative number/i,
+    );
+  });
+
+  it("refuses a fractional received quantity", () => {
+    expectValidationError(
+      () => buildReceiptLines([KEYBOARDS], { receivedQuantity: 10.5 }),
+      /receivedQuantity must be a whole, non-negative number/i,
+    );
+  });
+
+  it("refuses a fractional damaged quantity", () => {
+    expectValidationError(
+      () => buildReceiptLines([KEYBOARDS], { receivedQuantity: 10, damagedQuantity: 1.5 }),
+      /damagedQuantity must be a whole, non-negative number/i,
+    );
+  });
+
   it("refuses the flat form on a multi-line purchase order", () => {
     expectValidationError(
       () => buildReceiptLines([KEYBOARDS, MICE], { receivedQuantity: 100 }),
@@ -140,6 +168,26 @@ describe("buildReceiptLines — explicit items[]", () => {
           ],
         }),
       /reported twice/i,
+    );
+  });
+
+  it("refuses a negative quantity inside items[]", () => {
+    expectValidationError(
+      () =>
+        buildReceiptLines([KEYBOARDS], {
+          items: [{ purchaseOrderItemId: "poi-1", receivedQuantity: -1, damagedQuantity: 0 }],
+        }),
+      /receivedQuantity must be a whole, non-negative number/i,
+    );
+  });
+
+  it("refuses a fractional quantity inside items[]", () => {
+    expectValidationError(
+      () =>
+        buildReceiptLines([KEYBOARDS], {
+          items: [{ purchaseOrderItemId: "poi-1", receivedQuantity: 2.5, damagedQuantity: 0 }],
+        }),
+      /receivedQuantity must be a whole, non-negative number/i,
     );
   });
 
