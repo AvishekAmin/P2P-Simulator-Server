@@ -77,8 +77,8 @@ to `GET /shipments/:id` once a purchase order is `APPROVED`.
   `INTERNAL_ERROR` (500). Each per-stage doc lists the specific triggers for its endpoints.
 - **Polling, not sockets.** Realtime (Socket.IO) is planned but not implemented — every
   automatic/worker-driven transition is observed by polling `GET /requisitions/:id` (or
-  `GET /shipments/:id` post-approval) every ~1s, with a "still working" UI state rather than a hard
-  timeout error.
+  `GET /shipments/:id` post-approval, or `GET /invoices/:id` once an invoice is uploaded) every ~1s,
+  with a "still working" UI state rather than a hard timeout error.
 - **Cross-tenant access is always a 404**, never a 403 or a leaked record — don't rely on `error.code`
   to distinguish "doesn't exist" from "not yours."
 
@@ -111,7 +111,8 @@ watching those once you're in `PO_CREATED`.
 4. **Shipment/receipt screen.** `GET /shipments/:id`, with a "Simulate delivery" form posting to
    `/receipts/simulate`.
 5. **Invoice upload.** A file picker posting `multipart/form-data` to `/invoices`, then a poll on
-   `GET /invoices/:id` until `status` is `EXTRACTED` — the same poll-and-reveal pattern as step 2.
+   `GET /invoices/:id` until `status` is `EXTRACTED` or `FAILED` — the same poll-and-reveal pattern
+   as step 2. On `FAILED`, stop polling and surface `failureReason` instead of retrying the poll.
 6. Stop here until matching/payment/exceptions ship — see below.
 
 ## Not yet available

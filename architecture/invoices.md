@@ -14,7 +14,7 @@ POST /api/v1/invoices   (multipart: file + purchaseOrderId)
         ▼
 src/services/invoice.service.ts · createInvoice()
     load purchase order (tenant-scoped)   → missing?                404
-    status invoiceable?                   → DRAFT/PENDING/REJECTED  INVALID_STATE
+    status invoiceable?                   → DRAFT/PENDING_APPROVAL/REJECTED  INVALID_STATE
     randomUUID() → invoiceId
     storage.upload()                      → MIME + size + magic bytes checked here
         │
@@ -65,8 +65,8 @@ compare two independently-derived numbers.
 
 - **Money is transcribed, never calculated.** The model returns amounts as the decimal strings
   printed on the page (`"1820.50"`), and `toPaise()` in `src/zod/invoice.schema.ts` converts them to
-  integer paise. That conversion is string-based on purpose: `Math.round(1820.15 * 100)` is `182014`
-  in IEEE 754.
+  integer paise. That conversion is string-based on purpose: floating-point multiplication is exactly
+  the class of bug it avoids — `Math.round(1.005 * 100)` is `100`, not `101`, in IEEE 754.
 - **The prompt forbids arithmetic outright** — no summing line items, no reconciling a total that
   disagrees with them, no currency conversion. A total that contradicts the lines is transcribed as
   printed and left for matching to flag.

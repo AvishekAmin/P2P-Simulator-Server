@@ -104,7 +104,9 @@ client-side or treat it as a permanent link.
 
 ## GET /api/v1/invoices/:id
 
-Same object as above, populated once extraction succeeds:
+The same invoice fields as the upload response, populated once extraction succeeds — but note the
+envelope shape differs: `POST /invoices` nests the invoice under `data.invoice`, while this endpoint
+returns it directly as `data`:
 
 ```json
 {
