@@ -35,7 +35,7 @@ function validInput(overrides: Partial<UploadInput> = {}): UploadInput {
   return {
     invoiceId: "inv-001",
     fileName: "receipt.pdf",
-    buffer: Buffer.from("fake-pdf-content"),
+    buffer: Buffer.from("%PDF-1.4\nfake-pdf-content"),
     mimeType: "application/pdf",
     ...overrides,
   };
@@ -46,6 +46,9 @@ function validInput(overrides: Partial<UploadInput> = {}): UploadInput {
  * Cloudinary upload result.
  */
 function stubSuccessfulUpload(bytes = 1024) {
+  mockUrl.mockReturnValue(
+    "https://res.cloudinary.com/test/image/authenticated/p2p/invoices/inv-001/receipt.pdf",
+  );
   mockUploadStream.mockImplementation((_opts: unknown, cb: Function) => {
     const fakeResult = {
       public_id: "p2p/invoices/inv-001/receipt",
@@ -58,6 +61,13 @@ function stubSuccessfulUpload(bytes = 1024) {
     };
   });
 }
+
+/** Minimal valid magic-byte prefixes for each allowed MIME type. */
+const SIGNATURE_BYTES: Record<string, Buffer> = {
+  "application/pdf": Buffer.from("%PDF-1.4\nfake-pdf-content"),
+  "image/png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0]),
+  "image/jpeg": Buffer.from([0xff, 0xd8, 0xff, 0, 0, 0]),
+};
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -97,10 +107,22 @@ describe("CloudinaryStorage", () => {
 
     it.each(ALLOWED_MIME_TYPES)("accepts MIME type %s", async (mime) => {
       stubSuccessfulUpload();
-      const input = validInput({ mimeType: mime });
+      const input = validInput({ mimeType: mime, buffer: SIGNATURE_BYTES[mime] });
 
       const result = await storage.upload(input);
       expect(result).toHaveProperty("storageKey");
+    });
+
+    it("rejects a buffer whose content does not match the declared MIME type", async () => {
+      const input = validInput({
+        mimeType: "image/png",
+        buffer: Buffer.from("%PDF-1.4\nnot actually a png"),
+      });
+
+      await expect(storage.upload(input)).rejects.toThrow(AppError);
+      await expect(storage.upload(input)).rejects.toMatchObject({
+        code: "VALIDATION_ERROR",
+      });
     });
 
     it("rejects files exceeding MAX_FILE_SIZE_BYTES", async () => {
@@ -190,6 +212,7 @@ describe("CloudinaryStorage", () => {
 
       expect(mockDestroy).toHaveBeenCalledWith("p2p/invoices/inv-001/receipt", {
         type: "authenticated",
+        invalidate: true,
       });
     });
 
@@ -215,7 +238,7 @@ describe("CloudinaryStorage", () => {
 
       expect(url).toBe("https://res.cloudinary.com/signed-url");
       expect(mockUrl).toHaveBeenCalledWith("p2p/invoices/inv-001/receipt", {
-        resource_type: "auto",
+        resource_type: "image",
         type: "authenticated",
         secure: true,
         sign_url: true,

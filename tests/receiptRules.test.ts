@@ -191,6 +191,26 @@ describe("buildReceiptLines — explicit items[]", () => {
     );
   });
 
+  it("refuses a negative damagedQuantity inside items[]", () => {
+    expectValidationError(
+      () =>
+        buildReceiptLines([KEYBOARDS], {
+          items: [{ purchaseOrderItemId: "poi-1", receivedQuantity: 10, damagedQuantity: -1 }],
+        }),
+      /damagedQuantity must be a whole, non-negative number/i,
+    );
+  });
+
+  it("refuses a fractional damagedQuantity inside items[]", () => {
+    expectValidationError(
+      () =>
+        buildReceiptLines([KEYBOARDS], {
+          items: [{ purchaseOrderItemId: "poi-1", receivedQuantity: 10, damagedQuantity: 1.5 }],
+        }),
+      /damagedQuantity must be a whole, non-negative number/i,
+    );
+  });
+
   it("refuses an items[] payload where nothing arrived", () => {
     expectValidationError(
       () =>
