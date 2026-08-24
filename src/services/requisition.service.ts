@@ -18,6 +18,7 @@ import {
   parseDraft,
 } from "../zod/requisition.schema.js";
 import { recordAudit } from "./audit.service.js";
+import { purchaseOrderViewSelect } from "./purchaseOrder.service.js";
 
 const ENTITY_TYPE = "Requisition";
 
@@ -98,6 +99,7 @@ const requisitionDetailSelect = {
       supplier: { select: { id: true, name: true } },
     },
   },
+  purchaseOrder: { select: purchaseOrderViewSelect },
 } satisfies Prisma.RequisitionSelect;
 
 type RequisitionDetailRow = Prisma.RequisitionGetPayload<{
@@ -457,10 +459,18 @@ export async function getRequisition(params: { organizationId: string; requisiti
     throw AppError.notFound("Requisition not found");
   }
 
-  const { sourcingDecision: _decision, supplierCandidates: _candidates, ...rest } = requisition;
+  const {
+    sourcingDecision: _decision,
+    supplierCandidates: _candidates,
+    purchaseOrder,
+    ...rest
+  } = requisition;
 
   return {
     ...rest,
+    // Inlined so the frontend can tell from this one response that a purchase
+    // order exists and whether it is waiting for approval, without a second call.
+    purchaseOrder,
     draftRequirements: parseDraft(requisition.draftRequirements),
     ...toSourcingView(requisition),
   };
