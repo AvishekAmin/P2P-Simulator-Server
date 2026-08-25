@@ -7,8 +7,7 @@ const db = {
   exception: {
     findFirst: vi.fn(),
     findUniqueOrThrow: vi.fn(),
-    update: vi.fn(),
-    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    updateMany: vi.fn(),
     count: vi.fn(),
   },
   invoice: { updateMany: vi.fn() },
@@ -51,6 +50,8 @@ function buildException(overrides: Record<string, unknown> = {}) {
   };
 }
 
+let lastUpdateStatus = "RESOLVED";
+
 function auditActions(): string[] {
   return db.auditLog.create.mock.calls.map(
     (call) => (call[0] as { data: { action: string } }).data.action,
@@ -70,12 +71,12 @@ function resolve(decision: "APPROVE" | "REJECT" = "APPROVE") {
 beforeEach(() => {
   vi.clearAllMocks();
   db.exception.findFirst.mockResolvedValue(buildException());
-  db.exception.findUniqueOrThrow.mockImplementation(() => {
-    const lastUpdate = db.exception.updateMany.mock.calls.at(-1)?.[0]?.data;
-    return Promise.resolve(buildException(lastUpdate || { status: "RESOLVED" }));
+  db.exception.updateMany.mockImplementation((args: { data: { status: string } }) => {
+    lastUpdateStatus = args.data.status;
+    return Promise.resolve({ count: 1 });
   });
-  db.exception.update.mockImplementation((args: { data: { status: string } }) =>
-    Promise.resolve(buildException({ status: args.data.status })),
+  db.exception.findUniqueOrThrow.mockImplementation(() =>
+    Promise.resolve(buildException({ status: lastUpdateStatus })),
   );
   db.exception.count.mockResolvedValue(0);
   db.invoice.updateMany.mockResolvedValue({ count: 1 });
@@ -167,6 +168,8 @@ describe("resolveExceptionById — guards", () => {
 
   it.each(["RESOLVED", "REJECTED"])("refuses to re-decide a %s exception", async (status) => {
     db.exception.findFirst.mockResolvedValue(buildException({ status }));
+
+    db.exception.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(resolve("APPROVE")).rejects.toThrow(`Exception is already ${status}`);
     expect(db.exception.updateMany).not.toHaveBeenCalled();

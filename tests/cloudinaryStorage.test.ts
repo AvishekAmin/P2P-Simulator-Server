@@ -268,7 +268,6 @@ describe("CloudinaryStorage", () => {
       }
     });
 
-
     it("reports a missing object as NOT_FOUND so the caller does not retry it", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
 

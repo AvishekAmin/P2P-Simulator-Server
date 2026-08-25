@@ -17,10 +17,8 @@ import {
   type ExtractionResult,
   parseDraft,
 } from "../zod/requisition.schema.js";
-import { recordAudit } from "./audit.service.js";
+import { REQUISITION_ENTITY as ENTITY_TYPE, recordAudit } from "./audit.service.js";
 import { purchaseOrderViewSelect } from "./purchaseOrder.service.js";
-
-const ENTITY_TYPE = "Requisition";
 
 /**
  * Drafts contain nulls for not-yet-known fields, which Prisma's InputJsonValue
@@ -410,6 +408,22 @@ export async function applyFallbackClarification(params: {
       entityType: ENTITY_TYPE,
       entityId: requisitionId,
       metadata: { reason },
+    });
+
+    // This is the terminal branch of a technical failure (Gemini outage or
+    // malformed output on the final retry attempt) — every other stage logs
+    // WORKFLOW_FAILED here. Recorded alongside, not instead of, the
+    // REQUISITION_CLARIFICATION_REQUESTED row above: that one drives the
+    // user-facing message, this one makes the failure itself auditable
+    // (distinguishable from a genuine AI clarification, which shares the
+    // same action but carries actorType AI, not SYSTEM).
+    await recordAudit(tx, {
+      organizationId,
+      actorType: "SYSTEM",
+      action: "WORKFLOW_FAILED",
+      entityType: ENTITY_TYPE,
+      entityId: requisitionId,
+      metadata: { stage: "requisition", reason },
     });
   });
 

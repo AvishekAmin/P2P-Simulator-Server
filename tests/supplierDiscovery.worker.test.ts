@@ -9,7 +9,7 @@ const db = {
   supplierProduct: { findMany: vi.fn() },
   sourcingDecision: { findFirst: vi.fn(), upsert: vi.fn() },
   supplierCandidate: { deleteMany: vi.fn(), createMany: vi.fn() },
-  exception: { upsert: vi.fn() },
+  exception: { upsert: vi.fn(), findUnique: vi.fn() },
   auditLog: { create: vi.fn() },
   aIProcessingLog: { create: vi.fn() },
 };
@@ -132,6 +132,7 @@ beforeEach(() => {
   db.requisition.update.mockResolvedValue({ id: REQ });
   db.requisition.updateMany.mockResolvedValue({ count: 1 });
   db.exception.upsert.mockResolvedValue({ id: "exc-1" });
+  db.exception.findUnique.mockResolvedValue(null);
   db.auditLog.create.mockResolvedValue({ id: "audit-1" });
   db.aIProcessingLog.create.mockResolvedValue({ id: "ai-1" });
   generateStructured.mockResolvedValue(

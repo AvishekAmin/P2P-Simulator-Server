@@ -12,7 +12,7 @@ const db = {
   },
   invoiceItem: { deleteMany: vi.fn(), createMany: vi.fn() },
   purchaseOrder: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  exception: { upsert: vi.fn() },
+  exception: { upsert: vi.fn(), findUnique: vi.fn() },
   auditLog: { create: vi.fn() },
   aIProcessingLog: { create: vi.fn() },
 };
@@ -121,6 +121,7 @@ beforeEach(() => {
   db.invoiceItem.deleteMany.mockResolvedValue({ count: 0 });
   db.invoiceItem.createMany.mockResolvedValue({ count: 1 });
   db.exception.upsert.mockResolvedValue({ id: "exc-1" });
+  db.exception.findUnique.mockResolvedValue(null);
   db.auditLog.create.mockResolvedValue({});
   db.aIProcessingLog.create.mockResolvedValue({});
   download.mockResolvedValue(Buffer.from("%PDF-1.4\nfake"));

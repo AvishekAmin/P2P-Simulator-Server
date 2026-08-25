@@ -59,8 +59,14 @@ purchase order is never issued on terms nobody approved.
 
 `decideApprovalStatus()` returns `PENDING_APPROVAL` for every purchase order while
 `PO_AUTO_APPROVE_ENABLED` is `false` (`src/config/constants.ts`) — the MVP demo routes everything
-through a human. The threshold branch against `APPROVAL_THRESHOLDS_PAISE.AUTO_APPROVE_BELOW` is
-already written behind that flag, so enabling auto-approval is a one-constant change.
+through a human. The threshold branch against `APPROVAL_THRESHOLDS_PAISE.AUTO_APPROVE_BELOW`
+(`100_000_00` paise, i.e. ₹1,00,000, matching CLAUDE.md's approval rule) is already written behind
+that flag, so enabling auto-approval is a one-constant change.
+
+`APPROVAL_THRESHOLDS_PAISE.TRUSTED_SUPPLIER_AUTO_APPROVE_BELOW` (`1_000_000_00` paise) is also defined
+in `src/config/constants.ts` but is not read anywhere — `decideApprovalStatus()` has no
+trusted-supplier branch. Treat it as a placeholder for a future extension, not a currently-enforced
+rule.
 
 That flag is genuinely one constant: when creation produces an `APPROVED` purchase order it also
 stamps `approvedAt`, creates the shipment and writes the `PO_APPROVED` / `SHIPMENT_CREATED` audits
@@ -106,7 +112,8 @@ Every BullMQ job can run more than once, and a client can double-click Approve.
 Three write paths, each a single `prisma.$transaction`:
 
 - **Creation** — requisition claim + PO + items (nested create) + `PO_CREATED` audit + approval
-  exception + `EXCEPTION_CREATED` audit.
+  exception (`recordException` writes its own `EXCEPTION_CREATED` audit — see
+  `architecture/matching-and-payment.md`'s audit trail section).
 - **Approval** — guarded PO transition + shipment upsert + `PO_APPROVED` and `SHIPMENT_CREATED`
   audits + the approval exception resolved.
 - **Rejection** — guarded PO transition + requisition `FAILED` + `PO_REJECTED` audit + the approval

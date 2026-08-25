@@ -9,15 +9,13 @@ import {
   receiptStatus,
 } from "../rules/receiptRules.js";
 import { AppError } from "../utils/AppError.js";
-import { recordAudit } from "./audit.service.js";
+import { GOODS_RECEIPT_ENTITY, recordAudit } from "./audit.service.js";
 import {
   type PurchaseOrderView,
   purchaseOrderViewSelect,
   type ShipmentView,
   shipmentViewSelect,
 } from "./purchaseOrder.service.js";
-
-const GOODS_RECEIPT_ENTITY = "GoodsReceipt";
 
 /** Purchase-order statuses a delivery may be received against. */
 const RECEIVABLE_PO_STATUSES: PurchaseOrderStatus[] = [

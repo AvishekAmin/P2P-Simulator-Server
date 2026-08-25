@@ -9,7 +9,7 @@ const db = {
   threeWayMatch: { upsert: vi.fn() },
   matchCheck: { deleteMany: vi.fn(), createMany: vi.fn() },
   payment: { upsert: vi.fn() },
-  exception: { upsert: vi.fn() },
+  exception: { upsert: vi.fn(), findUnique: vi.fn() },
   auditLog: { create: vi.fn() },
 };
 
@@ -174,6 +174,7 @@ beforeEach(() => {
   db.matchCheck.createMany.mockResolvedValue({ count: 12 });
   db.payment.upsert.mockResolvedValue({ id: "pay-1" });
   db.exception.upsert.mockResolvedValue({ id: "exc-1" });
+  db.exception.findUnique.mockResolvedValue(null);
   db.auditLog.create.mockResolvedValue({});
 });
 

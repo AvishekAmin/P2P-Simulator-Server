@@ -39,7 +39,8 @@ src/workers/invoice.worker.ts
     AuditLog INVOICE_EXTRACTED (actorType AI)
         │
         ▼
-    enqueueMatching()   (queue consumer not built yet — see Not built)
+    enqueueMatching()  →  queue: matching · job: run-three-way-match
+                           (see architecture/matching-and-payment.md)
 ```
 
 The API never calls Gemini. Extraction is a multi-second vision call against a PDF, so the request
@@ -110,9 +111,11 @@ Assume every job runs more than once.
 outages, malformed JSON and schema violations are all treated as technical failures and rethrown so
 BullMQ retries them — a model that returned junk once often succeeds on the next call.
 
-One case skips the retries: an `AppError` with code `VALIDATION_ERROR` (an empty or corrupt document)
-will fail identically on every attempt, so it goes terminal immediately rather than burning two more
-Gemini calls on it.
+Two error codes skip the retries and go terminal immediately, because both fail identically on every
+attempt: `VALIDATION_ERROR` (an empty or corrupt document) and `NOT_FOUND` — the latter thrown by
+`storage.download()` when Cloudinary reports the object gone, renamed, or the signed URL rejected
+(`src/workers/invoice.worker.ts`, `PERMANENT_ERROR_CODES`). Both skip straight to the terminal-failure
+path below instead of burning two more Gemini calls.
 
 Once the attempts are spent, `applyInvoiceExtractionFailure()` sets the invoice `FAILED`, records
 `failureReason`, opens an `INVOICE_EXTRACTION_FAILED` exception at `CRITICAL`, and writes a
@@ -153,12 +156,10 @@ same signed URL — an unsigned delivery URL 401s.
 
 No duplicate check at upload. `Invoice.invoiceNumber` carries an index but no unique constraint, and
 a second invoice for the same purchase order is accepted: `DUPLICATE_INVOICE` is a three-way match
-check, and refusing the upload would hide the duplicate rather than record it.
-
-The worker enqueues to the `matching` queue, but no processor is registered for it yet — jobs queue
-until `src/rules/threeWayMatch.ts` and the matching worker land. `Invoice.supplierId` is copied from
-the purchase order at upload; reconciling it against `supplierNameRaw` is matching's `SUPPLIER` check,
-not this stage's job.
+check (`src/workers/matching.worker.ts`, see `architecture/matching-and-payment.md`), and refusing the
+upload would hide the duplicate rather than record it. `Invoice.supplierId` is copied from the
+purchase order at upload; reconciling it against `supplierNameRaw` is matching's `SUPPLIER` check, not
+this stage's job.
 
 No realtime event is emitted — the Socket.IO layer does not exist yet. The `INVOICE_UPLOADED` and
 `INVOICE_EXTRACTED` audit rows are the durable record.

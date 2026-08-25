@@ -9,12 +9,13 @@ import {
 } from "../generated/prisma/enums.js";
 import type { PurchaseOrderLine } from "../rules/approvalRules.js";
 import { AppError } from "../utils/AppError.js";
-import { recordAudit } from "./audit.service.js";
+import {
+  PURCHASE_ORDER_ENTITY,
+  REQUISITION_ENTITY,
+  recordAudit,
+  SHIPMENT_ENTITY,
+} from "./audit.service.js";
 import { recordException, resolveException } from "./exception.service.js";
-
-const REQUISITION_ENTITY = "Requisition";
-const PURCHASE_ORDER_ENTITY = "PurchaseOrder";
-const SHIPMENT_ENTITY = "Shipment";
 
 // ---------------------------------------------------------------------------
 // Read shapes
@@ -382,15 +383,6 @@ export async function applyPurchaseOrderCreation(
         description: input.approvalReason,
         metadata: { requisitionId, totalPaise: input.totalPaise },
       });
-
-      await recordAudit(tx, {
-        organizationId,
-        actorType: "SYSTEM",
-        action: "EXCEPTION_CREATED",
-        entityType: PURCHASE_ORDER_ENTITY,
-        entityId: purchaseOrder.id,
-        metadata: { type: ExceptionType.PO_APPROVAL_REQUIRED, reason: input.approvalReason },
-      });
     }
 
     return purchaseOrder;
@@ -442,15 +434,6 @@ export async function applyPurchaseOrderFailure(params: {
           : "Purchase order generation failed",
       description: reason,
       ...(metadata !== undefined ? { metadata } : {}),
-    });
-
-    await recordAudit(tx, {
-      organizationId,
-      actorType: "SYSTEM",
-      action: "EXCEPTION_CREATED",
-      entityType: REQUISITION_ENTITY,
-      entityId: requisitionId,
-      metadata: { type: exceptionType, reason },
     });
 
     await recordAudit(tx, {
